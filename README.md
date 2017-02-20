@@ -64,7 +64,8 @@ transacts them into the connection.
 ```
 [{:route/number "100"
   :route/name "Stavanger-Tau"
-  :route/vessels [{:vessel/imo "123"}]}
+  :route/vessels [{:vessel/imo "123"
+                   :vessel/mmsi "456}]}
  {:vessel/imo "123"
   :vessel/name "MF Hardanger"}]
 ```
@@ -72,8 +73,14 @@ transacts them into the connection.
 Note that every entity map needs to contain one and only one attribute that is
 marked as `:db.unique/identity` in the schema.
 
-The returned value has `:db-after`, `:db-before`, but most interestingly it has
-a `:tx-data` list of datoms. **This is the diff! Here it is!**
+Another interesting note about the above example is that since `:route/vessels`
+is marked as `:db.type/ref`, and `:vessel/imo` is `:db.unique/identity`, there
+will only be a single vessel entity as a result of this transaction, with all
+three asserted attributes (imo, mmsi and name).
+
+The returned value from `transact!` has `:db-after`, `:db-before`, but most
+interestingly it has a `:tx-data` list of datoms. **This is the diff! Here it
+is!**
 
 ## exporting to datascript
 
