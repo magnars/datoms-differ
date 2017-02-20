@@ -9,7 +9,7 @@ data via a datomic/datascript-like API and data structure.
 
 *What's it for then?*
 
-This is tool to use when you want to keep clients in sync with a backend. The
+This is a tool to use when you want to keep clients in sync with a backend. The
 client is initialized with a datascript db when connecting, and is fed updates
 in the form of tx-data when the backend changes.
 
@@ -23,6 +23,10 @@ outputs a set of tx-data additions and retractions.
 *What the what?*
 
 Yeah, still a good question.
+
+## Install
+
+Add `[datoms-differ "0.1.0"]` to `:dependencies` in your `project.clj`.
 
 ## API
 
