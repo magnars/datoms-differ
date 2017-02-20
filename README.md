@@ -40,10 +40,8 @@ empty db). A datascript schema might look like this:
 ```
 (def schema
   {:route/number {:db/unique :db.unique/identity}
-   :route/services {:db/valueType :db.type/ref
-                    :db/cardinality :db.cardinality/many}
-   :service/id {:db/unique :db.unique/identity}
-   :service/allocated-vessel {:db/valueType :db.type/ref}
+   :route/vessels {:db/valueType :db.type/ref
+                   :db/cardinality :db.cardinality/many}
    :vessel/imo {:db/unique :db.unique/identity}})
 ```
 
@@ -75,14 +73,14 @@ marked as `:db.unique/identity` in the schema.
 
 Another interesting note about the above example is that since `:route/vessels`
 is marked as `:db.type/ref`, and `:vessel/imo` is `:db.unique/identity`, there
-will only be a single vessel entity as a result of this transaction, with all
-three asserted attributes (imo, mmsi and name).
+will only be two entities as a result of this transaction. The route and one
+vessel with all three asserted attributes (imo, mmsi and name).
 
 The returned value from `transact!` has `:db-after`, `:db-before`, but most
 interestingly it has a `:tx-data` list of datoms. **This is the diff! Here it
 is!**
 
-## exporting to datascript
+## Exporting to datascript
 
 There's also some tools for exporting to datascript. This lets you create a
 datascript db in the client, and then keep it up to date with new txes.
@@ -91,6 +89,7 @@ Use `[datoms-differ.export]` with `(export-db db)` that gives you a string that
 can be read by clojurescript (when datascript is loaded) to create a datascript
 db.
 
-If you want to save some bytes over the wire, you can also use `(prune-diffs
-schema tx-data)` to remove retractions of values that are later asserted. This
-optimalisation is possible since datascript doesn't have a notion of history.
+If you want to reduce the amount of bytes sent over the wire, you can also use
+`(prune-diffs schema tx-data)` to remove retractions of values that are later
+asserted. This optimalisation is possible since datascript doesn't have a notion
+of history.
