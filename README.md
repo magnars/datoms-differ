@@ -26,7 +26,7 @@ Yeah, still a good question.
 
 ## Install
 
-Add `[datoms-differ "0.1.0"]` to `:dependencies` in your `project.clj`.
+Add `[datoms-differ "0.2.0"]` to `:dependencies` in your `project.clj`.
 
 ## API
 
