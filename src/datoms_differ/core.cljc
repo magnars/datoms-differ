@@ -1,5 +1,6 @@
 (ns datoms-differ.core
-  (:require [clojure.set :as set]))
+  (:require [clojure.set :as set]
+            [medley.core :refer [distinct-by]]))
 
 (defn find-identity-attrs [schema]
   (set (keep (fn [[k v]]
@@ -16,7 +17,8 @@
 (defn find-attrs [schema]
   {:identity? (find-attr schema :db/unique :db.unique/identity)
    :ref?      (find-attr schema :db/valueType :db.type/ref)
-   :many?     (find-attr schema :db/cardinality :db.cardinality/many)})
+   :many?     (find-attr schema :db/cardinality :db.cardinality/many)
+   :component? (find-attr schema :db/isComponent true)})
 
 (defn get-entity-ref [attrs entity]
   (let [refs (select-keys entity (:identity? attrs))]
@@ -29,12 +31,17 @@
                         {:entity entity
                          :attrs (:identity attrs)})))))
 
+(defn reverse-ref? [k]
+  (= \_ (first (name k))))
+
 (defn find-all-entities [{:keys [ref? many?] :as attrs} entity-maps]
   (->> (mapcat seq entity-maps)
        (mapcat (fn [[k v]]
-                 (when (ref? k)
-                   (find-all-entities attrs (if (many? k) v [v])))))
-       (into entity-maps)))
+                 (cond
+                   (ref? k) (find-all-entities attrs (if (many? k) v [v]))
+                   (reverse-ref? k) (find-all-entities attrs v))))
+       (into entity-maps)
+       (distinct-by #(get-entity-ref attrs %))))
 
 (defn create-refs-lookup [old-refs all-refs]
   (let [lowest-new-eid (inc (apply max 1023 (vals old-refs)))]
@@ -43,18 +50,31 @@
          (map-indexed (fn [i ref] [ref (+ lowest-new-eid i)]))
          (into old-refs))))
 
-(defn flatten-entity-map [{:keys [ref? many?] :as attrs} refs entity]
+(defn reverse-ref-attr [k]
+  (if (reverse-ref? k)
+    (keyword (namespace k) (subs (name k) 1))
+    (keyword (namespace k) (str "_" (name k)))))
+
+(defn flatten-entity-map [{:keys [ref? many? component?] :as attrs} refs entity]
   (let [eid (refs (get-entity-ref attrs entity))
         disallow-nils (fn [k v]
                         (when (nil? v)
                           (throw (ex-info "Attributes cannot be nil" {:entity (get-entity-ref attrs entity)
                                                                       :key k}))))]
     (mapcat (fn [[k v]]
-              (if (ref? k)
+              (cond
+                (ref? k)
                 (for [v (if (many? k) v [v])]
                   (do
                     (disallow-nils k v)
                     [eid k (refs (get-entity-ref attrs v))]))
+
+                (reverse-ref? k)
+                (let [reverse-k (reverse-ref-attr k)]
+                  (for [ref-entity-map (if (component? reverse-k) [v] v)]
+                    [(refs (get-entity-ref attrs ref-entity-map)) reverse-k eid]))
+
+                :else-scalar
                 (do
                   (disallow-nils k v)
                   [[eid k v]])))

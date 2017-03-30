@@ -6,6 +6,8 @@
   {:route/name {}
    :route/number {:db/unique :db.unique/identity}
    :route/services {:db/valueType :db.type/ref :db/cardinality :db.cardinality/many}
+   :service/trips {:db/valueType :db.type/ref :db/cardinality :db.cardinality/many :db/isComponent true}
+   :trip/id {:db/unique :db.unique/identity}
    :service/id {:db/unique :db.unique/identity}
    :service/label {}
    :service/allocated-vessel {:db/valueType :db.type/ref :db/cardinality :db.cardinality/one}
@@ -14,9 +16,10 @@
 
 (deftest finds-attrs
   (is (= (sut/find-attrs schema)
-         {:identity? #{:route/number :service/id :vessel/imo}
-          :ref? #{:route/services :service/allocated-vessel}
-          :many? #{:route/services}})))
+         {:identity? #{:route/number :service/id :vessel/imo :trip/id}
+          :ref? #{:route/services :service/allocated-vessel :service/trips}
+          :many? #{:route/services :service/trips}
+          :component? #{:service/trips}})))
 
 (def attrs (sut/find-attrs schema))
 
@@ -39,7 +42,13 @@
                              :service/allocated-vessel {:vessel/imo "123"}}]}
           {:service/id :s567
            :service/allocated-vessel {:vessel/imo "123"}}
-          {:vessel/imo "123"}])))
+          {:vessel/imo "123"}]))
+
+  (is (= (sut/find-all-entities attrs [{:vessel/imo "123"
+                                        :service/_allocated-vessel [{:service/id :s567}]}])
+         [{:vessel/imo "123"
+           :service/_allocated-vessel [{:service/id :s567}]}
+          {:service/id :s567}])))
 
 (deftest creates-new-eids-for-unknown-entity-refs
   (is (= (sut/create-refs-lookup {[:route/number "100"] 1024
@@ -60,6 +69,24 @@
                                   :route/name "Stavanger-Tau"})
          [[1024 :route/number "100"]
           [1024 :route/name "Stavanger-Tau"]]))
+
+  ;; reverse entity ref, isn't component
+  (is (= (sut/flatten-entity-map attrs
+                                 {[:service/id :s567] 1026
+                                  [:vessel/imo "123"] 1024}
+                                 {:vessel/imo "123"
+                                  :service/_allocated-vessel [{:service/id :s567}]})
+         [[1024 :vessel/imo "123"]
+          [1026 :service/allocated-vessel 1024]]))
+
+  ;; reverse entity ref, is component
+  (is (= (sut/flatten-entity-map attrs
+                                 {[:service/id :s567] 1026
+                                  [:trip/id "foo"] 1025}
+                                 {:trip/id "foo"
+                                  :service/_trips {:service/id :s567}})
+         [[1025 :trip/id "foo"]
+          [1026 :service/trips 1025]]))
 
   (is (= (sut/flatten-entity-map attrs
                                  {[:route/number "100"] 1024
@@ -103,6 +130,25 @@
                       [1025 :service/allocated-vessel 1027]
                       [1026 :service/id :s789]
                       [1027 :vessel/imo "123"]}})))
+
+  (testing "reverse refs"
+    (is (= {:refs {[:route/number "100"] 1027
+                   [:service/id :s567] 1026
+                   [:service/id :s789] 1025
+                   [:vessel/imo "123"] 1024}
+            :datoms #{[1027 :route/number "100"]
+                      [1027 :route/services 1026]
+                      [1027 :route/services 1025]
+                      [1026 :service/id :s567]
+                      [1026 :service/allocated-vessel 1024]
+                      [1025 :service/id :s789]
+                      [1024 :vessel/imo "123"]}}
+           (sut/explode {:schema schema :refs {}}
+                        [{:vessel/imo "123"
+                          :service/_allocated-vessel [{:service/id :s567
+                                                       :route/_services [{:route/number "100"}]}]}
+                         {:service/id :s789
+                          :route/_services [{:route/number "100"}]}]))))
 
   (testing "existing refs"
     (is (= (sut/explode {:schema schema :refs {[:route/number "100"] 2024
@@ -220,5 +266,3 @@
            {:tx-data tx-data-sporadic-2
             :db-before db-after-frequent-2
             :db-after db-after-sporadic-2}))))
-
-
