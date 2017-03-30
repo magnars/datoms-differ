@@ -1,6 +1,5 @@
 (ns datoms-differ.core
-  (:require [clojure.set :as set]
-            [medley.core :refer [distinct-by]]))
+  (:require [clojure.set :as set]))
 
 (defn find-identity-attrs [schema]
   (set (keep (fn [[k v]]
@@ -40,8 +39,7 @@
                  (cond
                    (ref? k) (find-all-entities attrs (if (many? k) v [v]))
                    (reverse-ref? k) (find-all-entities attrs v))))
-       (into entity-maps)
-       (distinct-by #(get-entity-ref attrs %))))
+       (into entity-maps)))
 
 (defn create-refs-lookup [old-refs all-refs]
   (let [lowest-new-eid (inc (apply max 1023 (vals old-refs)))]
@@ -80,13 +78,21 @@
                   [[eid k v]])))
             entity)))
 
+(defn disallow-conflicting-values [{:keys [many?]} datoms]
+  (doseq [[[e a] datoms] (group-by #(take 2 %) datoms)]
+    (when (and (not (many? a))
+               (< 1 (count datoms)))
+      (throw (ex-info (str "Conflicting values asserted for entity: " (pr-str datoms)) {})))))
+
 (defn explode [{:keys [schema refs]} entity-maps]
   (let [attrs (find-attrs schema)
         all-entities (find-all-entities attrs entity-maps)
-        entity-refs (map #(get-entity-ref attrs %) all-entities)
-        new-refs (create-refs-lookup refs entity-refs)]
+        entity-refs (distinct (map #(get-entity-ref attrs %) all-entities))
+        new-refs (create-refs-lookup refs entity-refs)
+        datoms (set (mapcat #(flatten-entity-map attrs new-refs %) all-entities))]
+    (disallow-conflicting-values attrs datoms)
     {:refs new-refs
-     :datoms (set (mapcat #(flatten-entity-map attrs new-refs %) all-entities))}))
+     :datoms datoms}))
 
 (defn diff [datoms-before datoms-after]
   (let [new (set/difference datoms-after datoms-before)

@@ -146,7 +146,7 @@
            (sut/explode {:schema schema :refs {}}
                         [{:vessel/imo "123"
                           :service/_allocated-vessel [{:service/id :s567
-                                                       :route/_services [{:route/number "100"}]}]}
+                                                       :route/_services #{{:route/number "100"}}}]}
                          {:service/id :s789
                           :route/_services [{:route/number "100"}]}]))))
 
@@ -163,7 +163,13 @@
                       [2024 :route/services 2025]
                       [2025 :service/id :s567]
                       [2025 :service/allocated-vessel 2026]
-                      [2026 :vessel/imo "123"]}}))))
+                      [2026 :vessel/imo "123"]}})))
+
+  (testing "conflicting values for entity attr"
+    (is (thrown? Exception ;; different values for same entity attribute
+                 (sut/explode {:schema schema :refs {}}
+                              [{:route/number "100" :route/name "Stavanger-Taua"}
+                               {:route/number "100" :route/name "Stavanger-Tau"}])))))
 
 (deftest diffs
   (is (= (sut/diff #{}
