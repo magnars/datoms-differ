@@ -33,12 +33,18 @@
 (defn reverse-ref? [k]
   (= \_ (first (name k))))
 
-(defn find-all-entities [{:keys [ref? many?] :as attrs} entity-maps]
+(defn reverse-ref-attr [k]
+  (if (reverse-ref? k)
+    (keyword (namespace k) (subs (name k) 1))
+    (keyword (namespace k) (str "_" (name k)))))
+
+(defn find-all-entities [{:keys [ref? many? component?] :as attrs} entity-maps]
   (->> (mapcat seq entity-maps)
        (mapcat (fn [[k v]]
                  (cond
                    (ref? k) (find-all-entities attrs (if (many? k) v [v]))
-                   (reverse-ref? k) (find-all-entities attrs v))))
+                   (reverse-ref? k) (let [reverse-k (reverse-ref-attr k)]
+                                      (find-all-entities attrs (if (component? reverse-k) [v] v))))))
        (into entity-maps)))
 
 (defn create-refs-lookup [old-refs all-refs]
@@ -47,11 +53,6 @@
          (remove old-refs)
          (map-indexed (fn [i ref] [ref (+ lowest-new-eid i)]))
          (into old-refs))))
-
-(defn reverse-ref-attr [k]
-  (if (reverse-ref? k)
-    (keyword (namespace k) (subs (name k) 1))
-    (keyword (namespace k) (str "_" (name k)))))
 
 (defn flatten-entity-map [{:keys [ref? many? component?] :as attrs} refs entity]
   (let [eid (refs (get-entity-ref attrs entity))

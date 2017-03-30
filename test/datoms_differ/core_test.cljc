@@ -134,21 +134,29 @@
   (testing "reverse refs"
     (is (= {:refs {[:route/number "100"] 1027
                    [:service/id :s567] 1026
-                   [:service/id :s789] 1025
+                   [:service/id :s789] 1028
+                   [:trip/id "foo"] 1025
+                   [:trip/id "bar"] 1029
                    [:vessel/imo "123"] 1024}
-            :datoms #{[1027 :route/number "100"]
-                      [1027 :route/services 1026]
-                      [1027 :route/services 1025]
-                      [1026 :service/id :s567]
+            :datoms #{[1024 :vessel/imo "123"]
+                      [1025 :trip/id "foo"]
+                      [1029 :trip/id "bar"]
                       [1026 :service/allocated-vessel 1024]
-                      [1025 :service/id :s789]
-                      [1024 :vessel/imo "123"]}}
+                      [1026 :service/id :s567]
+                      [1027 :route/number "100"]
+                      [1027 :route/services 1026]
+                      [1027 :route/services 1028]
+                      [1028 :service/id :s789]
+                      [1028 :service/trips 1025]
+                      [1028 :service/trips 1029]}}
            (sut/explode {:schema schema :refs {}}
                         [{:vessel/imo "123"
                           :service/_allocated-vessel [{:service/id :s567
                                                        :route/_services #{{:route/number "100"}}}]}
-                         {:service/id :s789
-                          :route/_services [{:route/number "100"}]}]))))
+                         {:trip/id "foo"
+                          :service/_trips {:service/id :s789
+                                           :route/_services #{{:route/number "100"}}
+                                           :service/trips #{{:trip/id "bar"}}}}]))))
 
   (testing "existing refs"
     (is (= (sut/explode {:schema schema :refs {[:route/number "100"] 2024
