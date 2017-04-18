@@ -26,7 +26,7 @@ Yeah, still a good question.
 
 ## Install
 
-Add `[datoms-differ "0.2.2"]` to `:dependencies` in your `project.clj`.
+Add `[datoms-differ "0.3.0"]` to `:dependencies` in your `project.clj`.
 
 ## API
 
@@ -93,3 +93,28 @@ If you want to reduce the amount of bytes sent over the wire, you can also use
 `(prune-diffs schema tx-data)` to remove retractions of values that are later
 asserted. This optimalisation is possible since datascript doesn't have a notion
 of history.
+
+## Contribute
+
+Yes, please do. And add tests for your feature or fix, or I'll
+certainly break it later.
+
+#### Running the tests
+
+`lein test` will run all tests.
+
+`lein test-refresh` will run all the tests indefinitely. It sets up a
+watcher on the code files. If they change, only the relevant tests will be
+run again.
+
+## Contributors
+
+- [Odin Hole Standal](https://github.com/Odinodin) allowed using `:db/id` as entity identifier.
+
+Thanks!
+
+## License
+
+Copyright © (iterate inc 2017) Magnar Sveen
+
+Distributed under the Eclipse Public License, the same as Clojure.
