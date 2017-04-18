@@ -31,7 +31,10 @@
                (sut/get-entity-ref attrs {:route/number "100" :service/id 200})))
 
   (is (thrown? Exception ;; no identity attributes
-               (sut/get-entity-ref attrs {:route/name "Stavanger-Tau"}))))
+               (sut/get-entity-ref attrs {:route/name "Stavanger-Tau"})))
+
+  (is (= (sut/get-entity-ref attrs {:db/id 123456 :route/name "100"})
+         [:db/id 123456])))
 
 (deftest finds-all-entities
   (is (= (sut/find-all-entities attrs [{:route/number "100"
@@ -50,15 +53,26 @@
            :service/_allocated-vessel [{:service/id :s567}]}
           {:service/id :s567}])))
 
-(deftest creates-new-eids-for-unknown-entity-refs
-  (is (= (sut/create-refs-lookup {[:route/number "100"] 1024
-                                  [:vessel/imo "123"] 1025}
-                                 [[:route/number "100"]
-                                  [:vessel/imo "123"]
-                                  [:service/id :s567]])
-         {[:route/number "100"] 1024
-          [:vessel/imo "123"] 1025
-          [:service/id :s567] 1026})))
+(deftest creates-refs-lookup
+  (testing "creates new eids for unknown entity refs"
+    (is (= (sut/create-refs-lookup {[:route/number "100"] 1024
+                                    [:vessel/imo "123"] 1025}
+             [[:route/number "100"]
+              [:vessel/imo "123"]
+              [:service/id :s567]])
+           {[:route/number "100"] 1024
+            [:vessel/imo "123"] 1025
+            [:service/id :s567] 1026})))
+  
+  (testing "uses db/id when given"
+    (is (= (sut/create-refs-lookup {[:route/number "100"] 1024
+                                    [:vessel/imo "123"] 1025}
+             [[:route/number "100"]
+              [:vessel/imo "123"]
+              [:db/id 99999]])
+           {[:route/number "100"] 1024
+            [:vessel/imo "123"] 1025
+            [:db/id 99999] 99999}))))
 
 (deftest flattens-entity-map
   (is (= (sut/flatten-entity-map attrs
@@ -98,6 +112,12 @@
          [[1024 :route/number "100"]
           [1024 :route/services 1026]]))
 
+  (is (= (sut/flatten-entity-map attrs
+           {[:db/id 99999] 99999}
+           {:db/id 99999
+            :route/name "Stavanger-Tau"})
+         [[99999 :route/name "Stavanger-Tau"]]))
+
   (is (thrown? Exception ;; no nil vals
                (sut/flatten-entity-map attrs
                                        {[:route/number "100"] 1024
@@ -130,6 +150,13 @@
                       [1025 :service/allocated-vessel 1027]
                       [1026 :service/id :s789]
                       [1027 :vessel/imo "123"]}})))
+
+  (testing "with db/id"
+    (is (= (sut/explode {:schema schema :refs {}}
+             [{:db/id 99999
+               :route/name "Stavanger-Tau"}])
+           {:refs {[:db/id 99999] 99999}
+            :datoms #{[99999 :route/name "Stavanger-Tau"]}})))
 
   (testing "reverse refs"
     (is (= {:refs {[:route/number "100"] 1027
@@ -177,7 +204,12 @@
     (is (thrown? Exception ;; different values for same entity attribute
                  (sut/explode {:schema schema :refs {}}
                               [{:route/number "100" :route/name "Stavanger-Taua"}
-                               {:route/number "100" :route/name "Stavanger-Tau"}])))))
+                               {:route/number "100" :route/name "Stavanger-Tau"}]))))
+
+  (testing "no attrs asserted for entity"
+    (is (thrown? Exception
+          (sut/explode {:schema schema :refs {}}
+            [{:db/id 999999}])))))
 
 (deftest diffs
   (is (= (sut/diff #{}

@@ -15,12 +15,12 @@
 
 (defn find-attrs [schema]
   {:identity? (find-attr schema :db/unique :db.unique/identity)
-   :ref?      (find-attr schema :db/valueType :db.type/ref)
-   :many?     (find-attr schema :db/cardinality :db.cardinality/many)
+   :ref? (find-attr schema :db/valueType :db.type/ref)
+   :many? (find-attr schema :db/cardinality :db.cardinality/many)
    :component? (find-attr schema :db/isComponent true)})
 
 (defn get-entity-ref [attrs entity]
-  (let [refs (select-keys entity (:identity? attrs))]
+  (let [refs (select-keys entity (conj (:identity? attrs) :db/id))]
     (case (bounded-count 2 refs)
       0 (throw (ex-info "Entity without identity attribute"
                         {:entity entity
@@ -51,7 +51,10 @@
   (let [lowest-new-eid (inc (apply max 1023 (vals old-refs)))]
     (->> all-refs
          (remove old-refs)
-         (map-indexed (fn [i ref] [ref (+ lowest-new-eid i)]))
+         (map-indexed (fn [i ref]
+                        (if (= (first ref) :db/id)
+                          [ref (second ref)]
+                          [ref (+ lowest-new-eid i)])))
          (into old-refs))))
 
 (defn flatten-entity-map [{:keys [ref? many? component?] :as attrs} refs entity]
@@ -62,6 +65,9 @@
                                                                       :key k}))))]
     (mapcat (fn [[k v]]
               (cond
+                (= k :db/id)
+                nil ;; db/id is not an attribute so exclude it
+
                 (ref? k)
                 (for [v (if (many? k) v [v])]
                   (do
@@ -85,13 +91,20 @@
                (< 1 (count datoms)))
       (throw (ex-info (str "Conflicting values asserted for entity: " (pr-str datoms)) {})))))
 
+(defn disallow-empty-entities [all-entities]
+  (doseq [e all-entities]
+    (when-not (seq (dissoc e :db/id))
+      (throw (ex-info (str "No attributes asserted for entity: " (pr-str e)) {})))))
+
 (defn explode [{:keys [schema refs]} entity-maps]
   (let [attrs (find-attrs schema)
         all-entities (find-all-entities attrs entity-maps)
+        _ (disallow-empty-entities all-entities)
         entity-refs (distinct (map #(get-entity-ref attrs %) all-entities))
         new-refs (create-refs-lookup refs entity-refs)
         datoms (set (mapcat #(flatten-entity-map attrs new-refs %) all-entities))]
     (disallow-conflicting-values attrs datoms)
+
     {:refs new-refs
      :datoms datoms}))
 
