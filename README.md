@@ -69,7 +69,7 @@ transacts them into the connection.
 ```
 
 Note that every entity map needs to contain one and only one attribute that is
-marked as `:db.unique/identity` in the schema.
+marked as `:db.unique/identity` in the schema. Alternatively, you may use `:db/id` to identify the entity instead.
 
 Another interesting note about the above example is that since `:route/vessels`
 is marked as `:db.type/ref`, and `:vessel/imo` is `:db.unique/identity`, there
