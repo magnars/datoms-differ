@@ -66,7 +66,7 @@
     (mapcat (fn [[k v]]
               (cond
                 (= k :db/id)
-                nil
+                nil ;; db/id is not an attribute so exclude it
 
                 (ref? k)
                 (for [v (if (many? k) v [v])]

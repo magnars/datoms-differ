@@ -151,6 +151,13 @@
                       [1026 :service/id :s789]
                       [1027 :vessel/imo "123"]}})))
 
+  (testing "with db/id"
+    (is (= (sut/explode {:schema schema :refs {}}
+             [{:db/id 99999
+               :route/name "Stavanger-Tau"}])
+           {:refs {[:db/id 99999] 99999}
+            :datoms #{[99999 :route/name "Stavanger-Tau"]}})))
+
   (testing "reverse refs"
     (is (= {:refs {[:route/number "100"] 1027
                    [:service/id :s567] 1026
