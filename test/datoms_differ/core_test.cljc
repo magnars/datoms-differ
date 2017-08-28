@@ -57,19 +57,19 @@
   (testing "creates new eids for unknown entity refs"
     (is (= (sut/create-refs-lookup {[:route/number "100"] 1024
                                     [:vessel/imo "123"] 1025}
-             [[:route/number "100"]
-              [:vessel/imo "123"]
-              [:service/id :s567]])
+                                   [[:route/number "100"]
+                                    [:vessel/imo "123"]
+                                    [:service/id :s567]])
            {[:route/number "100"] 1024
             [:vessel/imo "123"] 1025
             [:service/id :s567] 1026})))
-  
+
   (testing "uses db/id when given"
     (is (= (sut/create-refs-lookup {[:route/number "100"] 1024
                                     [:vessel/imo "123"] 1025}
-             [[:route/number "100"]
-              [:vessel/imo "123"]
-              [:db/id 99999]])
+                                   [[:route/number "100"]
+                                    [:vessel/imo "123"]
+                                    [:db/id 99999]])
            {[:route/number "100"] 1024
             [:vessel/imo "123"] 1025
             [:db/id 99999] 99999}))))
@@ -113,9 +113,9 @@
           [1024 :route/services 1026]]))
 
   (is (= (sut/flatten-entity-map attrs
-           {[:db/id 99999] 99999}
-           {:db/id 99999
-            :route/name "Stavanger-Tau"})
+                                 {[:db/id 99999] 99999}
+                                 {:db/id 99999
+                                  :route/name "Stavanger-Tau"})
          [[99999 :route/name "Stavanger-Tau"]]))
 
   (is (thrown? Exception ;; no nil vals
@@ -153,8 +153,8 @@
 
   (testing "with db/id"
     (is (= (sut/explode {:schema schema :refs {}}
-             [{:db/id 99999
-               :route/name "Stavanger-Tau"}])
+                        [{:db/id 99999
+                          :route/name "Stavanger-Tau"}])
            {:refs {[:db/id 99999] 99999}
             :datoms #{[99999 :route/name "Stavanger-Tau"]}})))
 
@@ -208,8 +208,8 @@
 
   (testing "no attrs asserted for entity"
     (is (thrown? Exception
-          (sut/explode {:schema schema :refs {}}
-            [{:db/id 999999}])))))
+                 (sut/explode {:schema schema :refs {}}
+                              [{:db/id 999999}])))))
 
 (deftest diffs
   (is (= (sut/diff #{}
@@ -312,3 +312,58 @@
            {:tx-data tx-data-sporadic-2
             :db-before db-after-frequent-2
             :db-after db-after-sporadic-2}))))
+
+(deftest with-supports-partial-updates
+  (let [db-at-first (sut/empty-db schema)
+        tx-1 [{:route/number "100"
+               :route/services [{:service/id :s567
+                                 :service/allocated-vessel {:vessel/imo "123"}}]}]
+        refs {[:route/number "100"] 1024
+              [:service/id :s567] 1025
+              [:vessel/imo "123"] 1026}
+
+        tx-1-datoms #{[1024 :route/number "100"]
+                      [1024 :route/services 1025]
+                      [1025 :service/id :s567]
+                      [1025 :service/allocated-vessel 1026]
+                      [1026 :vessel/imo "123"]}
+
+        tx-1-data #{[:db/add 1024 :route/number "100"]
+                    [:db/add 1024 :route/services 1025]
+                    [:db/add 1025 :service/id :s567]
+                    [:db/add 1025 :service/allocated-vessel 1026]
+                    [:db/add 1026 :vessel/imo "123"]}
+
+        db-after-tx-1 {:schema schema
+                       :refs refs
+                       :source-datoms {:source tx-1-datoms}}
+
+        tx-2 (with-meta
+               [{:route/number "100"
+                 :route/name "Stavanger-Tau"}]
+               {:partial-update? true})
+
+        tx-2-datoms #{[1024 :route/number "100"]
+                      [1024 :route/name "Stavanger-Tau"]
+                      [1024 :route/services 1025]
+                      [1025 :service/id :s567]
+                      [1025 :service/allocated-vessel 1026]
+                      [1026 :vessel/imo "123"]}
+
+        tx-2-data #{[:db/add 1024 :route/name "Stavanger-Tau"]}
+
+        db-after-tx-2 {:schema schema
+                       :refs refs
+                       :source-datoms {:source tx-2-datoms}}]
+
+    (is (= (-> (sut/with db-at-first :source tx-1)
+               (update :tx-data set))
+           {:tx-data tx-1-data
+            :db-before db-at-first
+            :db-after db-after-tx-1}))
+
+    (is (= (-> (sut/with db-after-tx-1 :source tx-2)
+               (update :tx-data set))
+           {:tx-data tx-2-data
+            :db-before db-after-tx-1
+            :db-after db-after-tx-2}))))

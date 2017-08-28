@@ -128,8 +128,9 @@
 
 (defn with [db source entity-maps]
   (let [{:keys [datoms refs]} (explode db entity-maps)
-        db-after (-> (assoc db :refs refs)
-                     (assoc-in [:source-datoms source] datoms))]
+        db-after (if (-> entity-maps meta :partial-update?)
+                   (update-in (assoc db :refs refs) [:source-datoms source] #(into % datoms))
+                   (assoc-in (assoc db :refs refs) [:source-datoms source] datoms))]
     {:tx-data (diff (get-datoms db) (get-datoms db-after))
      :db-before db
      :db-after db-after}))

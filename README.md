@@ -46,7 +46,7 @@ empty db). A datascript schema might look like this:
 ```
 
 Like datascript, datoms-differ only cares about `:db.unique/identity`,
-`:db.type/ref`, and `:db.cardinality/many`.
+`:db.type/ref`, `:db.cardinality/many` and `:db/isComponent`.
 
 ### `(transact! conn source entity-maps)`
 
@@ -93,6 +93,20 @@ If you want to reduce the amount of bytes sent over the wire, you can also use
 `(prune-diffs schema tx-data)` to remove retractions of values that are later
 asserted. This optimalisation is possible since datascript doesn't have a notion
 of history.
+
+## Partial updates
+
+Datoms differ retracts facts that are not restated in new transactions. If you
+want to update some information without having to rebuild everything, you can
+add `:partial-update? true` meta to the list of entity maps.
+
+```
+(dd/transact! conn :my-source
+              (with-meta
+                [{:vessel/imo "123"
+                  :vessel/name "Updated name"}]
+                {:partial-update? true}))
+```
 
 ## Contribute
 
