@@ -108,6 +108,8 @@ add `:partial-update? true` meta to the list of entity maps.
                 {:partial-update? true}))
 ```
 
+You should probably avoid this feature.
+
 ## Contribute
 
 Yes, please do. And add tests for your feature or fix, or I'll
