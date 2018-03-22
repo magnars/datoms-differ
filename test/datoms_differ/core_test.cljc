@@ -102,6 +102,17 @@
          [[1025 :trip/id "foo"]
           [1026 :service/trips 1025]]))
 
+  ;; using entity IDs for refs
+  (is (= (sut/flatten-entity-map attrs
+                                 {[:service/id :s567] 1024
+                                  [:db/id 1025] 1025
+                                  [:db/id 1026] 1026}
+                                 {:service/id :s567
+                                  :service/trips [1025 1026]})
+         [[1024 :service/id :s567]
+          [1024 :service/trips 1025]
+          [1024 :service/trips 1026]]))
+
   (is (= (sut/flatten-entity-map attrs
                                  {[:route/number "100"] 1024
                                   [:vessel/imo "123"] 1025

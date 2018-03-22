@@ -72,7 +72,9 @@
                 (for [v (if (many? k) v [v])]
                   (do
                     (disallow-nils k v)
-                    [eid k (refs (get-entity-ref attrs v))]))
+                    [eid k (if (number? v)
+                             v
+                             (refs (get-entity-ref attrs v)))]))
 
                 (reverse-ref? k)
                 (let [reverse-k (reverse-ref-attr k)]
