@@ -226,6 +226,13 @@
                  (sut/explode {:schema schema :refs {}}
                               [{:db/id 999999 :route/services [{:db/id 888888}]}])))
 
+    ;; adding refs to an existing entity is OK
+    (is (= {:refs {[:db/id 999999] 999999
+                   [:db/id 888888] 888888}
+            :datoms #{[999999 :route/services 888888]}}
+           (sut/explode {:schema schema :refs {[:db/id 888888] 888888}}
+                        [{:db/id 999999 :route/services [{:db/id 888888}]}])))
+
     (is (= (sut/explode {:schema schema :refs {}}
                         [{:db/id 999999 :route/services [{:db/id 888888 :service/name "Tjeneste 1"}]}])
            (sut/explode {:schema schema :refs {}}

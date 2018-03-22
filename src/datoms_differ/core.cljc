@@ -93,11 +93,13 @@
                (< 1 (count datoms)))
       (throw (ex-info (str "Conflicting values asserted for entity: " (pr-str datoms)) {})))))
 
-(defn disallow-empty-entities [all-entities datoms]
-  (let [entity-id-has-datoms? (set (map first datoms))]
+(defn disallow-empty-entities [all-entities datoms refs]
+  (let [entity-id-has-datoms? (set (map first datoms))
+        entity-id-is-known-ref? (set (map second refs))]
     (doseq [e all-entities]
       (when (and (empty? (dissoc e :db/id))
-                 (not (entity-id-has-datoms? (:db/id e))))
+                 (not (entity-id-has-datoms? (:db/id e)))
+                 (not (entity-id-is-known-ref? (:db/id e))))
         (throw (ex-info (str "No attributes asserted for entity: " (pr-str e)) {}))))))
 
 (defn explode [{:keys [schema refs]} entity-maps]
@@ -107,7 +109,7 @@
         new-refs (create-refs-lookup refs entity-refs)
         datoms (set (mapcat #(flatten-entity-map attrs new-refs %) all-entities))]
     (disallow-conflicting-values attrs datoms)
-    (disallow-empty-entities all-entities datoms)
+    (disallow-empty-entities all-entities datoms refs)
     {:refs new-refs
      :datoms datoms}))
 
