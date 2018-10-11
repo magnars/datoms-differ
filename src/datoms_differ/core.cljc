@@ -26,7 +26,7 @@
                         {:entity entity
                          :attrs (:identity attrs)}))
       1 (first refs)
-      2 (throw (ex-info "Entity with multiple identity attributes"
+      2 (throw (ex-info (str "Entity with multiple identity attributes: " refs)
                         {:entity entity
                          :attrs (:identity attrs)})))))
 

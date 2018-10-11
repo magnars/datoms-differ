@@ -28,7 +28,7 @@
          [:route/number "100"]))
 
   (is (thrown? Exception ;; multiple identity attributes
-               (sut/get-entity-ref attrs {:route/number "100" :service/id 200})))
+               (sut/get-entity-ref attrs {:route/number "100" :service/id 200 :route/name "Stavanger-Tau"})))
 
   (is (thrown? Exception ;; no identity attributes
                (sut/get-entity-ref attrs {:route/name "Stavanger-Tau"})))
