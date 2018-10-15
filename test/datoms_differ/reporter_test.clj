@@ -188,10 +188,16 @@
   (is (= (sut/create-report [[:same-entity [:route/number "300"] [[:removed :route/active? true]
                                                                   [:changed :route/disabled? [false true]]
                                                                   [:added :route/details {:abcdefghi 123456 :defghijkl 456789 :ghijklmno 789123}]]]])
-         [{:text "Changed 2 attributes for [:route/number \"300\"]"
+         [{:text "Changed 3 attributes for [:route/number \"300\"]"
            :details ["removed :route/active? true"
                      "changed :route/disabled? to true"
                      "added :route/details {:abcdefghi 123456, :defghijkl 4567...}"]}]))
+
+  (is (= (sut/create-report [[:same-entity [:route/number "300"] [[:removed :route/active? true]
+                                                                  [:removed :route/disabled? false]]]])
+         [{:text "Removed 2 attributes from [:route/number \"300\"]"
+           :details [":route/active? true"
+                     ":route/disabled? false"]}]))
 
   (is (= (sut/create-report [[:changed-identities [[[:route/number 100] [:route/number "100"]]
                                                    [[:route/number 101] [:route/number "101"]]]]])

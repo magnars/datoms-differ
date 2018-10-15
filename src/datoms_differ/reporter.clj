@@ -178,12 +178,19 @@
 
       (= :same-entity t)
       (let [[e changes] args]
-        {:text (str "Changed 2 attributes for " e)
-         :details (for [[event a v] changes]
-                    (cond
-                      (= :added event) (str "added " a " " (pr-data v))
-                      (= :removed event) (str "removed " a " " (pr-data v))
-                      (= :changed event) (str "changed " a " to " (pr-data (second v)))))})
+        (let [types (set (map first changes))
+              all-same-type? (= 1 (count types))]
+          {:text (if all-same-type?
+                   (case (first types)
+                     :added (str "Added " (count changes) " attributes to " e)
+                     :removed (str "Removed " (count changes) " attributes from " e)
+                     :changed (str "Changed " (count changes) " attributes for " e))
+                   (str "Changed " (count changes) " attributes for " e))
+           :details (for [[event a v] changes]
+                      (cond
+                        (= :added event) (str (when-not all-same-type? "added ") a " " (pr-data v))
+                        (= :removed event) (str (when-not all-same-type? "removed ") a " " (pr-data v))
+                        (= :changed event) (str "changed " a " to " (pr-data (second v)))))}))
 
       (= :several-entities t)
       (let [[t a entities] args]
