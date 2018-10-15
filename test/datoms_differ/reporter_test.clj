@@ -27,6 +27,14 @@
          [[:added [:route/number "100"] :route/name "Stavanger-Tau"]]))
 
   (is (= (sut/find-individual-changes
+          [[[:route/number "100"] :route/services :service-1]
+           [[:route/number "100"] :route/services :service-2]
+           [[:route/number "100"] :route/services :service-3]]
+          [[[:route/number "100"] :route/services :service-1]])
+         [[:removed [:route/number "100"] :route/services :service-3]
+          [:removed [:route/number "100"] :route/services :service-2]]))
+
+  (is (= (sut/find-individual-changes
           [[[:route/number "100"] :route/number "100"]
            [[:route/number "100"] :route/name "Stavanger-Tau"]]
           [[[:route/number "100"] :route/number "100"]

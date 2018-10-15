@@ -21,10 +21,16 @@
         new-datoms (set new-datoms)
         removed (set/difference (set old-datoms) (set new-datoms))
         added (set/difference (set new-datoms) (set old-datoms))
-        changed (->> (concat removed added)
-                     (group-by (fn [[e a _]] [e a]))
-                     (vals)
-                     (filter next))
+        changed (let [removed-ea->datoms (group-by (fn [[e a _]] [e a]) removed)
+                      added-ea->datoms (group-by (fn [[e a _]] [e a]) added)
+                      removed-and-added-eas (set/intersection (set (keys removed-ea->datoms))
+                                                              (set (keys added-ea->datoms)))]
+                  (keep (fn [ea]
+                          (when (and (not (next (removed-ea->datoms ea)))
+                                     (not (next (added-ea->datoms ea)))) ;; one removed, one added
+                            [(first (removed-ea->datoms ea))
+                             (first (added-ea->datoms ea))]))
+                        removed-and-added-eas))
         removed (set/difference removed (set (map first changed)))
         added (set/difference added (set (map second changed)))]
     (-> []
