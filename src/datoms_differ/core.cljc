@@ -118,7 +118,7 @@
   (let [attrs (find-attrs schema)
         all-entities (find-all-entities attrs entity-maps)
         entity-refs (distinct (map #(get-entity-ref attrs %) all-entities))
-        new-refs (create-refs-lookup (::db-id-partition schema) refs entity-refs)
+        new-refs (create-refs-lookup (::db-id-partition schema default-db-id-partition) refs entity-refs)
         datoms (set (mapcat #(flatten-entity-map attrs new-refs %) all-entities))]
     (disallow-conflicting-values attrs datoms)
     (disallow-empty-entities all-entities datoms refs)
@@ -133,9 +133,7 @@
      (for [[e a v] new] [:db/add e a v]))))
 
 (defn empty-db [schema]
-  {:schema (cond-> schema
-             (not (::db-id-partition schema))
-             (assoc ::db-id-partition default-db-id-partition))
+  {:schema schema
    :refs {}
    :source-datoms {}})
 
