@@ -4,7 +4,8 @@
 
 (defn export [schema datoms]
   (str "#datascript/DB "
-       (pr-str {:schema schema :datoms (vec datoms)})))
+       (pr-str {:schema (dissoc schema :datoms-differ.core/db-id-partition)
+                :datoms (vec datoms)})))
 
 (defn prep-for-datascript
   "Filter away any keys from the schema contents that does not start with the :db/ namespace"

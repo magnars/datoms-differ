@@ -94,7 +94,28 @@ If you want to reduce the amount of bytes sent over the wire, you can also use
 asserted. This optimalisation is possible since datascript doesn't have a notion
 of history.
 
-## Partial updates
+## Using `:db/id` to identify entities
+
+Normally datoms-differ maintains its own internal entity ids. However, entities
+with a `:db/id` asserted will be allocated this exact entity id in the resulting
+datascript database. This can be useful.
+
+### An issue you probably won't ever have to think about
+
+Note that datoms-differ uses internal entity ids in the [8796093022208
+8806093022208] partition, and disallows `:db/id`s in this range with an error:
+
+> Asserted :db/ids cannot be within the internal db-id-partition
+
+You can change the internal db-id-partition by specifying it as part of the schema:
+
+```
+    (create-conn (assoc schema :datoms-differ.core/db-id-partition {:from 1024 :to 2048}))
+```
+
+These numbers are both inclusive.
+
+## ~~Partial updates~~
 
 Datoms differ retracts facts that are not restated in new transactions. If you
 want to update some information without having to rebuild everything, you can
@@ -108,7 +129,7 @@ add `:partial-update? true` meta to the list of entity maps.
                 {:partial-update? true}))
 ```
 
-You should probably avoid this feature.
+**Avoid this feature. It's a bad idea.**
 
 ## Contribute
 

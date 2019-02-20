@@ -1,6 +1,10 @@
 (ns datoms-differ.core
   (:require [clojure.set :as set]))
 
+(def default-db-id-partition
+  {:from 8796093022208
+   :to   8806093022208}) ;; 10,000,000,000 entity ids should be enough for anybody™
+
 (defn find-identity-attrs [schema]
   (set (keep (fn [[k v]]
                (when (= :db.unique/identity (:db/unique v))
@@ -47,14 +51,22 @@
                                       (find-all-entities attrs (if (component? reverse-k) [v] v))))))
        (into entity-maps)))
 
-(defn create-refs-lookup [old-refs all-refs]
-  (let [lowest-new-eid (inc (apply max 1023 (vals old-refs)))]
+(defn create-refs-lookup [{:keys [from to]} old-refs all-refs]
+  (let [lowest-new-eid (inc (apply max
+                                   (dec from)
+                                   (filter #(<= from % to) (vals old-refs))))]
     (->> all-refs
          (remove old-refs)
          (map-indexed (fn [i ref]
                         (if (= (first ref) :db/id)
-                          [ref (second ref)]
-                          [ref (+ lowest-new-eid i)])))
+                          (let [eid (second ref)]
+                            (when (<= from eid to)
+                              (throw (ex-info "Asserted :db/id cannot be within the internal db-id-partition, check :datoms-differ.core/db-id-partition" {:ref ref :internal-partition {:from from :to to}})))
+                            [ref (second ref)])
+                          (let [eid (+ lowest-new-eid i)]
+                            (when-not (<= from eid to)
+                              (throw (ex-info "Generated internal eid falls outside internal db-id-partition, check :datoms-differ.core/db-id-partition" {:ref ref :eid eid :internal-partition {:from from :to to}})))
+                            [ref eid]))))
          (into old-refs))))
 
 (defn flatten-entity-map [{:keys [ref? many? component?] :as attrs} refs entity]
@@ -106,7 +118,7 @@
   (let [attrs (find-attrs schema)
         all-entities (find-all-entities attrs entity-maps)
         entity-refs (distinct (map #(get-entity-ref attrs %) all-entities))
-        new-refs (create-refs-lookup refs entity-refs)
+        new-refs (create-refs-lookup (::db-id-partition schema) refs entity-refs)
         datoms (set (mapcat #(flatten-entity-map attrs new-refs %) all-entities))]
     (disallow-conflicting-values attrs datoms)
     (disallow-empty-entities all-entities datoms refs)
@@ -121,7 +133,9 @@
      (for [[e a v] new] [:db/add e a v]))))
 
 (defn empty-db [schema]
-  {:schema schema
+  {:schema (cond-> schema
+             (not (::db-id-partition schema))
+             (assoc ::db-id-partition default-db-id-partition))
    :refs {}
    :source-datoms {}})
 

@@ -3,7 +3,8 @@
             [datoms-differ.core :as sut]))
 
 (def schema
-  {:route/name {}
+  {:datoms-differ.core/db-id-partition {:from 1024 :to 2048}
+   :route/name {}
    :route/number {:db/unique :db.unique/identity}
    :route/services {:db/valueType :db.type/ref :db/cardinality :db.cardinality/many}
    :service/trips {:db/valueType :db.type/ref :db/cardinality :db.cardinality/many :db/isComponent true}
@@ -55,7 +56,8 @@
 
 (deftest creates-refs-lookup
   (testing "creates new eids for unknown entity refs"
-    (is (= (sut/create-refs-lookup {[:route/number "100"] 1024
+    (is (= (sut/create-refs-lookup {:from 1024 :to 2048}
+                                   {[:route/number "100"] 1024
                                     [:vessel/imo "123"] 1025}
                                    [[:route/number "100"]
                                     [:vessel/imo "123"]
@@ -65,14 +67,44 @@
             [:service/id :s567] 1026})))
 
   (testing "uses db/id when given"
-    (is (= (sut/create-refs-lookup {[:route/number "100"] 1024
+    (is (= (sut/create-refs-lookup {:from 1024 :to 2048}
+                                   {[:route/number "100"] 1024
                                     [:vessel/imo "123"] 1025}
                                    [[:route/number "100"]
                                     [:vessel/imo "123"]
                                     [:db/id 99999]])
            {[:route/number "100"] 1024
             [:vessel/imo "123"] 1025
-            [:db/id 99999] 99999}))))
+            [:db/id 99999] 99999})))
+
+  (testing "creates only eids within given db-id-partition"
+    (is (= (sut/create-refs-lookup {:from 1024 :to 2048}
+                                   {[:route/number "100"] 1024
+                                    [:db/id 99999] 99999}
+                                   [[:route/number "100"]
+                                    [:vessel/imo "123"]
+                                    [:db/id 99999]])
+           {[:route/number "100"] 1024
+            [:vessel/imo "123"] 1025
+            [:db/id 99999] 99999})))
+
+  (testing "disallows setting db/id to a number within db-id-partition"
+    (is (thrown? Exception
+                 (sut/create-refs-lookup {:from 1024 :to 2048}
+                                         {[:route/number "100"] 1024
+                                          [:vessel/imo "123"] 1025}
+                                         [[:route/number "100"]
+                                          [:vessel/imo "123"]
+                                          [:db/id 2048]]))))
+
+  (testing "fails when creating an internal eid outside the db-id-partition"
+    (is (thrown? Exception
+                 (sut/create-refs-lookup {:from 1024 :to 2048}
+                                         {[:route/number "100"] 2048}
+                                         [[:route/number "100"]
+                                          [:vessel/imo "123"]]))))
+
+  )
 
 (deftest flattens-entity-map
   (is (= (sut/flatten-entity-map attrs
