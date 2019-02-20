@@ -5,8 +5,9 @@
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[medley "0.8.4"]
                  [clansi "1.0.0"]]
-  :profiles {:dev {:dependencies [[org.clojure/clojure "1.9.0-alpha14"]
-                                  [flare "0.3.0-SNAPSHOT"]]
-                   :plugins [[com.jakemccrary/lein-test-refresh "0.17.0"]]
-                   :injections [(require 'flare.clojure-test)
-                                (flare.clojure-test/install!)]}})
+  :profiles {:dev {:dependencies [[org.clojure/clojure "1.10.0"]
+                                  [org.clojure/tools.cli "0.4.1"] ;; for kaocha to recognize command line options
+                                  [lambdaisland/kaocha "0.0-389"]
+                                  [kaocha-noyoda "2019-01-29"]]
+                   :plugins [[com.jakemccrary/lein-test-refresh "0.17.0"]]}}
+  :aliases {"kaocha" ["run" "-m" "kaocha.runner"]})
