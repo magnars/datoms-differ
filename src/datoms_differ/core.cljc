@@ -144,17 +144,19 @@
   (apply set/union #{} (vals (:source-datoms db))))
 
 (defn disallow-conflicting-sources [db new-source-id new-datoms]
-  (doseq [[old-source-id old-datoms] (:source-datoms db)]
-    (when (not= old-source-id new-source-id)
-      (let [source-ea->v (into {} (for [[e a v] old-datoms]
-                                    [[e a] v]))]
-        (doseq [[e a v] new-datoms]
-          (let [source-v (source-ea->v [e a])]
-            (when (and source-v (not= source-v v))
-              (throw (ex-info (str "Conflicting values asserted between sources: "
-                                   (pr-str [old-source-id {a source-v}]) " vs "
-                                   (pr-str [new-source-id {a v}]))
-                              {:e e :a a :source-values {old-source-id source-v new-source-id v}})))))))))
+  (let [{:keys [many?]} (find-attrs (:schema db))]
+    (doseq [[old-source-id old-datoms] (:source-datoms db)]
+      (when (not= old-source-id new-source-id)
+        (let [source-ea->v (into {} (for [[e a v] old-datoms]
+                                      [[e a] v]))]
+          (doseq [[e a v] new-datoms]
+            (when-not (many? a)
+              (let [source-v (source-ea->v [e a])]
+                (when (and source-v (not= source-v v))
+                  (throw (ex-info (str "Conflicting values asserted between sources: "
+                                       (pr-str [old-source-id {a source-v}]) " vs "
+                                       (pr-str [new-source-id {a v}]))
+                                  {:e e :a a :source-values {old-source-id source-v new-source-id v}})))))))))))
 
 (defn with [db source entity-maps]
   (let [{:keys [datoms refs]} (explode db entity-maps)

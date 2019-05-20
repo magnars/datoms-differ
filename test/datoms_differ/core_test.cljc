@@ -374,15 +374,24 @@
             :db-after db-after-sporadic-2}))))
 
 (deftest with-complains-about-conflicting-information-from-different-sources
-  (let [db-at-first (sut/empty-db schema)
-        tx-source-1 [{:service/id :s567 :service/label "I"}]
-        tx-source-2 [{:service/id :s567 :service/label "II"}]
-        refs {[:service/id :s567] 1025}]
-    (is (thrown? Exception
-                 (-> db-at-first
-                     (sut/with :source-1 tx-source-1)
-                     :db-after
-                     (sut/with :source-2 tx-source-2))))))
+  (testing "throws when sources give different values for same attribute"
+    (let [db-at-first (sut/empty-db schema)
+          tx-source-1 [{:service/id :s567 :service/label "I"}]
+          tx-source-2 [{:service/id :s567 :service/label "II"}]]
+      (is (thrown? Exception
+                   (-> db-at-first
+                       (sut/with :source-1 tx-source-1)
+                       :db-after
+                       (sut/with :source-2 tx-source-2))))))
+
+  (testing "does not throw when new entities are asserted for a cardinality many attr"
+    (let [db-at-first (sut/empty-db schema)
+          tx-source-1 [{:service/id :s567 :service/trips #{{:trip/id "bar"}}}]
+          tx-source-2 [{:service/id :s567 :service/trips #{{:trip/id "foo"}}}]]
+      (is (-> db-at-first
+              (sut/with :source-1 tx-source-1)
+              :db-after
+              (sut/with :source-2 tx-source-2))))))
 
 (deftest with-supports-partial-updates
   (let [db-at-first (sut/empty-db schema)
