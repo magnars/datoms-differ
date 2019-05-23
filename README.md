@@ -80,6 +80,21 @@ The returned value from `transact!` has `:db-after`, `:db-before`, but most
 interestingly it has a `:tx-data` list of datoms. **This is the diff! Here it
 is!**
 
+## Updating multiple sources at once
+
+If multiple sources has changed at the same time, you can use
+`transact-sources!` to assert all transactions at once.
+
+### `(transact-sources! conn source->entity-maps)`
+
+Takes a connection and a map from source identifier to a list of entity maps,
+and transacts them all into the connection.
+
+In addition to being more efficient, and simpler to work with when you have
+multiple sources updating at once, this also avoids an issue where old data +
+partial new data would make a conflict, where the conflict is resolved in
+another part of the new data (not yet asserted).
+
 ## Exporting to datascript
 
 There's also some tools for exporting to datascript. This lets you create a

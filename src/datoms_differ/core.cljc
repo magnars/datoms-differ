@@ -99,11 +99,15 @@
                   [[eid k v]])))
             entity)))
 
-(defn disallow-conflicting-values [{:keys [many?]} datoms]
+(defn disallow-conflicting-values [refs {:keys [many?]} datoms]
   (doseq [[[e a] datoms] (group-by #(take 2 %) datoms)]
     (when (and (not (many? a))
                (< 1 (count datoms)))
-      (throw (ex-info (str "Conflicting values asserted for entity: " (pr-str datoms)) {})))))
+      (throw (ex-info "Conflicting values asserted for entity"
+                      (let [e->entity-ref (set/map-invert refs)]
+                        {:entity-ref (e->entity-ref e)
+                         :attr a
+                         :conflicting-values (into #{} (map #(nth % 2) datoms))}))))))
 
 (defn disallow-empty-entities [all-entities datoms refs]
   (let [entity-id-has-datoms? (set (map first datoms))
@@ -120,7 +124,7 @@
         entity-refs (distinct (map #(get-entity-ref attrs %) all-entities))
         new-refs (create-refs-lookup (::db-id-partition schema default-db-id-partition) refs entity-refs)
         datoms (set (mapcat #(flatten-entity-map attrs new-refs %) all-entities))]
-    (disallow-conflicting-values attrs datoms)
+    (disallow-conflicting-values new-refs attrs datoms)
     (disallow-empty-entities all-entities datoms refs)
     {:refs new-refs
      :datoms datoms}))
@@ -143,27 +147,44 @@
 (defn get-datoms [db]
   (apply set/union #{} (vals (:source-datoms db))))
 
-(defn disallow-conflicting-sources [db new-source-id new-datoms]
-  (let [{:keys [many?]} (find-attrs (:schema db))]
-    (doseq [[old-source-id old-datoms] (:source-datoms db)]
-      (when (not= old-source-id new-source-id)
-        (let [source-ea->v (into {} (for [[e a v] old-datoms]
-                                      [[e a] v]))]
-          (doseq [[e a v] new-datoms]
-            (when-not (many? a)
-              (let [source-v (source-ea->v [e a])]
-                (when (and source-v (not= source-v v))
-                  (throw (ex-info (str "Conflicting values asserted between sources: "
-                                       (pr-str [old-source-id {a source-v}]) " vs "
-                                       (pr-str [new-source-id {a v}]))
-                                  {:e e :a a :source-values {old-source-id source-v new-source-id v}})))))))))))
+(defn disallow-conflicting-sources [db]
+  (let [{:keys [many? ref?]} (find-attrs (:schema db))]
+    (doseq [[[e a] datoms] (->> (:source-datoms db)
+                                (mapcat (fn [[source datoms]]
+                                          (keep (fn [[e a v]]
+                                                  (when-not (many? a)
+                                                    {:e e :a a :v v :source source}))
+                                                datoms)))
+                                (group-by (fn [{:keys [e a]}] [e a])))]
+      (when (< 1 (count (set (map :v datoms))))
+        (let [e->entity-ref (set/map-invert (:refs db))]
+          (throw
+           (ex-info "Conflicting values asserted between sources"
+                    (into {}
+                          (for [{:keys [e a v source]} datoms]
+                            [source [(e->entity-ref e) a (if (ref? a)
+                                                           (e->entity-ref v)
+                                                           v)]])))))))))
+
+(defn- update-db-with-source-entity-maps [db source entity-maps]
+  (let [{:keys [datoms refs]} (explode db entity-maps)]
+    (if (-> entity-maps meta :partial-update?)
+      (update-in (assoc db :refs refs) [:source-datoms source] #(into % datoms))
+      (assoc-in (assoc db :refs refs) [:source-datoms source] datoms))))
 
 (defn with [db source entity-maps]
-  (let [{:keys [datoms refs]} (explode db entity-maps)
-        _ (disallow-conflicting-sources db source datoms)
-        db-after (if (-> entity-maps meta :partial-update?)
-                   (update-in (assoc db :refs refs) [:source-datoms source] #(into % datoms))
-                   (assoc-in (assoc db :refs refs) [:source-datoms source] datoms))]
+  (let [db-after (update-db-with-source-entity-maps db source entity-maps)
+        _ (disallow-conflicting-sources db-after)]
+    {:tx-data (diff (get-datoms db) (get-datoms db-after))
+     :db-before db
+     :db-after db-after}))
+
+(defn with-sources [db source->entity-maps]
+  (let [db-after (reduce (fn [db [source entity-maps]]
+                           (update-db-with-source-entity-maps db source entity-maps))
+                         db
+                         source->entity-maps)
+        _ (disallow-conflicting-sources db-after)]
     {:tx-data (diff (get-datoms db) (get-datoms db-after))
      :db-before db
      :db-after db-after}))
@@ -172,6 +193,14 @@
   (let [report (atom nil)]
     (swap! conn (fn [db]
                   (let [r (with db source entity-maps)]
+                    (reset! report r)
+                    (:db-after r))))
+    @report))
+
+(defn transact-sources! [conn source->entity-maps]
+  (let [report (atom nil)]
+    (swap! conn (fn [db]
+                  (let [r (with-sources db source->entity-maps)]
                     (reset! report r)
                     (:db-after r))))
     @report))

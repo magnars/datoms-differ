@@ -244,10 +244,17 @@
                       [2026 :vessel/imo "123"]}})))
 
   (testing "conflicting values for entity attr"
-    (is (thrown? Exception ;; different values for same entity attribute
-                 (sut/explode {:schema schema :refs {}}
-                              [{:route/number "100" :route/name "Stavanger-Taua"}
-                               {:route/number "100" :route/name "Stavanger-Tau"}]))))
+    (try
+      (sut/explode {:schema schema :refs {}}
+                   [{:route/number "100" :route/name "Stavanger-Taua"}
+                    {:route/number "100" :route/name "Stavanger-Tau"}])
+      (is (= :should-throw :didnt))
+      (catch Exception e
+        (is (= "Conflicting values asserted for entity" (.getMessage e)))
+        (is (= {:entity-ref [:route/number "100"]
+                :attr :route/name
+                :conflicting-values #{"Stavanger-Taua" "Stavanger-Tau"}}
+               (ex-data e))))))
 
   (testing "no attrs asserted for entity"
     (is (thrown? Exception
@@ -378,11 +385,31 @@
     (let [db-at-first (sut/empty-db schema)
           tx-source-1 [{:service/id :s567 :service/label "I"}]
           tx-source-2 [{:service/id :s567 :service/label "II"}]]
-      (is (thrown? Exception
-                   (-> db-at-first
-                       (sut/with :source-1 tx-source-1)
-                       :db-after
-                       (sut/with :source-2 tx-source-2))))))
+      (try (-> db-at-first
+               (sut/with :source-1 tx-source-1)
+               :db-after
+               (sut/with :source-2 tx-source-2))
+           (is (= :should-throw :didnt))
+           (catch Exception e
+             (is (= "Conflicting values asserted between sources" (.getMessage e)))
+             (is (= {:source-1 [[:service/id :s567] :service/label "I"]
+                     :source-2 [[:service/id :s567] :service/label "II"]}
+                    (ex-data e)))))))
+
+  (testing "includes entity ref for conflicting ref values"
+    (let [db-at-first (sut/empty-db schema)
+          tx-source-1 [{:service/id :s567 :service/allocated-vessel {:vessel/imo "123"}}]
+          tx-source-2 [{:service/id :s567 :service/allocated-vessel {:vessel/imo "456"}}]]
+      (try (-> db-at-first
+               (sut/with :source-1 tx-source-1)
+               :db-after
+               (sut/with :source-2 tx-source-2))
+           (is (= :should-throw :didnt))
+           (catch Exception e
+             (is (= "Conflicting values asserted between sources" (.getMessage e)))
+             (is (= {:source-1 [[:service/id :s567] :service/allocated-vessel [:vessel/imo "123"]]
+                     :source-2 [[:service/id :s567] :service/allocated-vessel [:vessel/imo "456"]]}
+                    (ex-data e)))))))
 
   (testing "does not throw when new entities are asserted for a cardinality many attr"
     (let [db-at-first (sut/empty-db schema)
@@ -392,6 +419,21 @@
               (sut/with :source-1 tx-source-1)
               :db-after
               (sut/with :source-2 tx-source-2))))))
+
+(deftest with-sources
+  (testing "throws when sources give different values for same attribute"
+    (let [db-at-first (sut/empty-db schema)
+          tx-source-1-beg [{:service/id :s567 :service/label "I"}]
+          tx-source-2-beg [{:service/id :s567 :service/label "I"}]
+          tx-source-1-end [{:service/id :s567 :service/label "II"}]
+          tx-source-2-end [{:service/id :s567 :service/label "II"}]]
+      (is (-> db-at-first
+              (sut/with :source-1 tx-source-1-beg)
+              :db-after
+              (sut/with :source-2 tx-source-2-beg)
+              :db-after
+              (sut/with-sources {:source-1 tx-source-1-end
+                                 :source-2 tx-source-2-end}))))))
 
 (deftest with-supports-partial-updates
   (let [db-at-first (sut/empty-db schema)
