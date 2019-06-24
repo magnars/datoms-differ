@@ -81,12 +81,13 @@
                 nil ;; db/id is not an attribute so exclude it
 
                 (ref? k)
-                (for [v (if (many? k) v [v])]
-                  (do
-                    (disallow-nils k v)
-                    [eid k (if (number? v)
-                             v
-                             (refs (get-entity-ref attrs v)))]))
+                (doall
+                 (for [v (if (many? k) v [v])]
+                   (do
+                     (disallow-nils k v)
+                     [eid k (if (number? v)
+                              v
+                              (refs (get-entity-ref attrs v)))])))
 
                 (reverse-ref? k)
                 (let [reverse-k (reverse-ref-attr k)]
@@ -94,9 +95,11 @@
                     [(refs (get-entity-ref attrs ref-entity-map)) reverse-k eid]))
 
                 :else-scalar
-                (do
-                  (disallow-nils k v)
-                  [[eid k v]])))
+                (doall
+                 (for [v (if (many? k) v [v])]
+                   (do
+                     (disallow-nils k v)
+                     [eid k v])))))
             entity)))
 
 (defn disallow-conflicting-values [refs {:keys [many?]} datoms]

@@ -7,6 +7,7 @@
    :route/name {}
    :route/number {:db/unique :db.unique/identity}
    :route/services {:db/valueType :db.type/ref :db/cardinality :db.cardinality/many}
+   :route/tags {:db/cardinality :db.cardinality/many}
    :service/trips {:db/valueType :db.type/ref :db/cardinality :db.cardinality/many :db/isComponent true}
    :trip/id {:db/unique :db.unique/identity}
    :service/id {:db/unique :db.unique/identity}
@@ -19,7 +20,7 @@
   (is (= (sut/find-attrs schema)
          {:identity? #{:route/number :service/id :vessel/imo :trip/id}
           :ref? #{:route/services :service/allocated-vessel :service/trips}
-          :many? #{:route/services :service/trips}
+          :many? #{:route/services :service/trips :route/tags}
           :component? #{:service/trips}})))
 
 (def attrs (sut/find-attrs schema))
@@ -175,6 +176,16 @@
                         [{:route/number "100"}])
            {:refs {[:route/number "100"] 1024}
             :datoms #{[1024 :route/number "100"]}})))
+
+  (testing "cardinality many"
+    (is (= (sut/explode {:schema schema :refs {}}
+                        [{:route/number "100"
+                          :route/tags #{:foo :bar :baz}}])
+           {:refs {[:route/number "100"] 1024}
+            :datoms #{[1024 :route/number "100"]
+                      [1024 :route/tags :foo]
+                      [1024 :route/tags :bar]
+                      [1024 :route/tags :baz]}})))
 
   (testing "no existing refs, interesting case"
     (is (= (sut/explode {:schema schema :refs {}}

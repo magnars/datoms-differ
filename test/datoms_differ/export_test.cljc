@@ -10,7 +10,7 @@
                              [2025 :service/allocated-vessel 2026]
                              [2026 :vessel/imo "123"]])
          (str "#datascript/DB {"
-              ":schema {:service/label {}, :route/name {}, :trip/id #:db{:unique :db.unique/identity}, :vessel/imo #:db{:unique :db.unique/identity}, :service/trips #:db{:valueType :db.type/ref, :cardinality :db.cardinality/many, :isComponent true}, :vessel/name {}, :route/services #:db{:valueType :db.type/ref, :cardinality :db.cardinality/many}, :service/allocated-vessel #:db{:valueType :db.type/ref, :cardinality :db.cardinality/one}, :route/number #:db{:unique :db.unique/identity}, :service/id #:db{:unique :db.unique/identity}}, "
+              ":schema {:route/tags #:db{:cardinality :db.cardinality/many}, :service/label {}, :route/name {}, :trip/id #:db{:unique :db.unique/identity}, :vessel/imo #:db{:unique :db.unique/identity}, :service/trips #:db{:valueType :db.type/ref, :cardinality :db.cardinality/many, :isComponent true}, :vessel/name {}, :route/services #:db{:valueType :db.type/ref, :cardinality :db.cardinality/many}, :service/allocated-vessel #:db{:valueType :db.type/ref, :cardinality :db.cardinality/one}, :route/number #:db{:unique :db.unique/identity}, :service/id #:db{:unique :db.unique/identity}}, "
               ":datoms [[2024 :route/number \"100\"] [2024 :route/services 2025] [2025 :service/id :s567] [2025 :service/allocated-vessel 2026] [2026 :vessel/imo \"123\"]]"
               "}"))))
 
