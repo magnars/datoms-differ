@@ -10,8 +10,24 @@
                              [2025 :service/allocated-vessel 2026]
                              [2026 :vessel/imo "123"]])
          (str "#datascript/DB {"
-              ":schema {:route/tags #:db{:cardinality :db.cardinality/many}, :service/label {}, :route/name {}, :trip/id #:db{:unique :db.unique/identity}, :vessel/imo #:db{:unique :db.unique/identity}, :service/trips #:db{:valueType :db.type/ref, :cardinality :db.cardinality/many, :isComponent true}, :vessel/name {}, :route/services #:db{:valueType :db.type/ref, :cardinality :db.cardinality/many}, :service/allocated-vessel #:db{:valueType :db.type/ref, :cardinality :db.cardinality/one}, :route/number #:db{:unique :db.unique/identity}, :service/id #:db{:unique :db.unique/identity}}, "
-              ":datoms [[2024 :route/number \"100\"] [2024 :route/services 2025] [2025 :service/id :s567] [2025 :service/allocated-vessel 2026] [2026 :vessel/imo \"123\"]]"
+              ":schema "
+              "{:route/tags #:db{:cardinality :db.cardinality/many},"
+              " :service/label {},"
+              " :route/name {},"
+              " :trip/id #:db{:unique :db.unique/identity},"
+              " :vessel/imo #:db{:unique :db.unique/identity},"
+              " :service/trips #:db{:valueType :db.type/ref, :cardinality :db.cardinality/many, :isComponent true},"
+              " :vessel/name {},"
+              " :route/services #:db{:valueType :db.type/ref, :cardinality :db.cardinality/many},"
+              " :service/allocated-vessel #:db{:valueType :db.type/ref, :cardinality :db.cardinality/one},"
+              " :route/number #:db{:unique :db.unique/identity},"
+              " :service/id #:db{:unique :db.unique/identity}}, "
+              ":datoms "
+              "[[2024 :route/number \"100\" 536870912]"
+              " [2024 :route/services 2025 536870912]"
+              " [2025 :service/id :s567 536870912]"
+              " [2025 :service/allocated-vessel 2026 536870912]"
+              " [2026 :vessel/imo \"123\" 536870912]]"
               "}"))))
 
 (deftest prunes-diffs

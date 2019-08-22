@@ -2,10 +2,13 @@
   (:require [datoms-differ.core :refer [get-datoms find-attrs]]
             [medley.core :refer [filter-keys map-vals]]))
 
+(def tx0 (inc (:to datoms-differ.core/default-db-id-partition)))
+
 (defn export [schema datoms]
   (str "#datascript/DB "
        (pr-str {:schema (dissoc schema :datoms-differ.core/db-id-partition)
-                :datoms (vec datoms)})))
+                :datoms (into [] (map #(conj % tx0)) datoms)})))
+
 
 (defn prep-for-datascript
   "Filter away any keys from the schema contents that does not start with the :db/ namespace"

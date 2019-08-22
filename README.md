@@ -117,8 +117,8 @@ datascript database. This can be useful.
 
 ### An issue you probably won't ever have to think about
 
-Note that datoms-differ uses internal entity ids in the [8796093022208
-8806093022208] partition, and disallows `:db/id`s in this range with an error:
+Note that datoms-differ uses internal entity ids in the [0x10000000
+0x1FFFFFFF] partition, and disallows `:db/id`s in this range with an error:
 
 > Asserted :db/ids cannot be within the internal db-id-partition
 

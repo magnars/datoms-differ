@@ -2,8 +2,8 @@
   (:require [clojure.set :as set]))
 
 (def default-db-id-partition
-  {:from 8796093022208
-   :to   8806093022208}) ;; 10,000,000,000 entity ids should be enough for anybody™
+  {:from 0x10000000
+   :to   0x1FFFFFFF})
 
 (defn find-identity-attrs [schema]
   (set (keep (fn [[k v]]
