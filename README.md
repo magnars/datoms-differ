@@ -153,9 +153,9 @@ certainly break it later.
 
 #### Running the tests
 
-`lein test` will run all tests.
+`bin/kaocha` will run all tests.
 
-`lein test-refresh` will run all the tests indefinitely. It sets up a
+`bin/kaocha --watch` will run all the tests indefinitely. It sets up a
 watcher on the code files. If they change, only the relevant tests will be
 run again.
 
