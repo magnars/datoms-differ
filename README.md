@@ -69,7 +69,7 @@ transacts them into the connection.
 ```
 
 Note that every entity map needs to contain one and only one attribute that is
-marked as `:db.unique/identity` in the schema. Alternatively, you may use `:db/id` to identify the entity instead.
+marked as `:db.unique/identity` in the schema.
 
 Another interesting note about the above example is that since `:route/vessels`
 is marked as `:db.type/ref`, and `:vessel/imo` is `:db.unique/identity`, there
@@ -109,7 +109,9 @@ If you want to reduce the amount of bytes sent over the wire, you can also use
 asserted. This optimalisation is possible since datascript doesn't have a notion
 of history.
 
-## Using `:db/id` to identify entities
+## ~~Using `:db/id` to identify entities~~
+
+**Avoid this feature. It's not a good idea.**
 
 Normally datoms-differ maintains its own internal entity ids. However, entities
 with a `:db/id` asserted will be allocated this exact entity id in the resulting
@@ -132,6 +134,8 @@ These numbers are both inclusive.
 
 ## ~~Partial updates~~
 
+**Avoid this feature too. It's also not a good idea.**
+
 Datoms differ retracts facts that are not restated in new transactions. If you
 want to update some information without having to rebuild everything, you can
 add `:partial-update? true` meta to the list of entity maps.
@@ -143,8 +147,6 @@ add `:partial-update? true` meta to the list of entity maps.
                   :vessel/name "Updated name"}]
                 {:partial-update? true}))
 ```
-
-**Avoid this feature. It's a bad idea.**
 
 ## Contribute
 
