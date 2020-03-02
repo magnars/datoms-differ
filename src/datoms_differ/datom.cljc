@@ -133,7 +133,6 @@
    (cmp (.-a d1) (.-a d2))
    (cmp (.-v d1) (.-v d2))))
 
-
 (defn- cmp-attr-quick [a1 a2]
   ;; either both are keywords or both are strings
   #?(:cljs
@@ -157,3 +156,8 @@
   (if (seq datoms)
     (set/from-sequential cmp-datoms-eavs datoms)
     (empty-eavs)))
+
+(defn diff-in-value? [^Datom a ^Datom b]
+  (and (= (.-e a) (.-e b))
+       (= (.-a a) (.-a b))
+       (not= (.-v a) (.-v b))))

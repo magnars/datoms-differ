@@ -99,25 +99,26 @@
   (let [disallow-nils (fn [k v entity]
                         (when (nil? v)
                           (throw (ex-info "Attributes cannot be nil" {:entity (get-entity-ref attrs entity)
-                                                                      :key k}))))]
+                                                                      :key k}))))
+        get-eid #(refs (get-entity-ref attrs %))]
     (->> all-entities
          (reduce
           (fn [acc entity]
-            (let [eid (refs (get-entity-ref attrs entity))]
+            (let [eid (get-eid entity)]
               (reduce-kv
                (fn [acc k v]
                  (cond
                    (ref? k)
                    (reduce (fn [acc v]
                              (disallow-nils k v entity)
-                             (conj! acc (d/datom eid k (if (number? v) v (refs (get-entity-ref attrs v))) source)))
+                             (conj! acc (d/datom eid k (if (number? v) v (get-eid v)) source)))
                            acc
                            (if (many? k) v [v]))
 
                    (reverse-ref? k)
                    (let [reverse-k (reverse-ref-attr k)]
                      (reduce (fn [acc ref-entity-map]
-                               (conj! acc (d/datom (refs (get-entity-ref attrs ref-entity-map)) reverse-k eid source)))
+                               (conj! acc (d/datom (get-eid ref-entity-map) reverse-k eid source)))
                              acc
                              (if (component? reverse-k) [v] v)))
 
@@ -137,18 +138,16 @@
   (:conflict
    (persistent!
     (reduce
-     (fn [{:keys [prev] :as acc} {:keys [e a v] :as curr}]
+     (fn [{:keys [prev] :as acc} curr]
        (cond
-         (many? a)
+         (many? (:a curr))
          acc
 
          (nil? prev)
          (assoc! acc :prev curr)
 
-         (and (= (:e prev) e)
-              (= (:a prev) a)
-              (not= (:v prev) v))
-         (reduced (assoc! acc :conflict [e a]))
+         (d/diff-in-value? prev curr)
+         (reduced (assoc! acc :conflict [(:e curr) (:a curr)]))
 
          :else (assoc! acc :prev curr)))
      (transient {})
@@ -180,10 +179,10 @@
      (for [[e a v] new] [:db/add e a v]))))
 
 (defn disallow-conflicting-sources [{:keys [attrs eavs refs]}]
-  (let [{:keys [many? ref?]} attrs
-        e->entity-ref (clojure.set/map-invert refs)]
+  (let [{:keys [many? ref?]} attrs]
     (when-let [[e a] (find-conflicting-value many? eavs)]
-      (let [datoms (set/slice eavs (d/datom e a nil nil) (d/datom e a nil nil))]
+      (let [e->entity-ref (clojure.set/map-invert refs)
+            datoms (set/slice eavs (d/datom e a nil nil) (d/datom e a nil nil))]
         (throw
          (ex-info "Conflicting values asserted between sources"
                   (into {}
