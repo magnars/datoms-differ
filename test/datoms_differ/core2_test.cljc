@@ -264,5 +264,24 @@
                         :db-after (new-db before
                                           #{(d/datom 1025 :route/number "700" :prepare-routes)
                                             (d/datom 1025 :route/name "Døvær" :prepare-routes)}
-                                          {[:route/number "700"] 1025})})))))
+                                          {[:route/number "700"] 1025})})))
+
+    (testing "Added new entity and remove one gives add/remove txes, new datoms and new refs"
+      (let [source->entity-maps {:prepare-routes [{:route/number "800" :route/name "Røvær"}]}
+            before-db (sut/create-conn schema)
+            _ (sut/transact-sources! before-db {:prepare-routes [{:route/number "800"
+                                                                  :route/name "Røvær"}]})
+            before @before-db]
+        (assert-report (sut/transact-sources! before-db {:prepare-routes [{:route/number "700"
+                                                                           :route/name "Døvær"}]})
+                       {:tx-data [[:db/retract 1024 :route/number "800"]
+                                  [:db/retract 1024 :route/name "Røvær"]
+                                  [:db/add 1025 :route/number "700"]
+                                  [:db/add 1025 :route/name "Døvær"]]
+                        :db-before before
+                        :db-after (assoc before
+                                         :eavs #{(d/datom 1025 :route/number "700" :prepare-routes)
+                                                 (d/datom 1025 :route/name "Døvær" :prepare-routes)}
+                                         :refs {[:route/number "700"] 1025
+                                                [:route/number "800"] 1024})})))))
 

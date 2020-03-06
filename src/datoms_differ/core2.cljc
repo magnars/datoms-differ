@@ -2,7 +2,7 @@
   (:require [datoms-differ.datom :as d]
             [me.tonsky.persistent-sorted-set :as set]))
 
-(defn- diff-sorted [a b cmp]
+(defn diff-sorted [a b cmp]
   (loop [only-a (transient [])
          only-b (transient [])
          a a
@@ -191,12 +191,27 @@
                                                     (e->entity-ref v)
                                                     v)]]))))))))
 
+(defn replace-source-datoms [eavs source datoms]
+  (let [[old new] (diff-sorted  (filter #(identical? (:s %) source) eavs)
+                                datoms
+                                d/cmp-datoms-eav-only)]
+    (loop [eavs (transient eavs)
+           to-remove old
+           to-add new]
+      (let [r (first to-remove)
+            a (first to-add)]
+        (cond
+          (and r a) (recur (-> eavs (disj! r) (conj! a)) (next to-remove) (next to-add))
+          (and (nil? r) a) (into (persistent! eavs) to-add)
+          (and r (nil? a)) (persistent! (reduce disj! eavs to-remove))
+          :else (persistent! eavs))))))
+
 (defn with-sources [db source->entity-maps]
   (let [db-after (reduce (fn [db [source entity-maps]]
                            (let [{:keys [datoms refs]} (explode source db entity-maps)]
                              (-> db
                                  (assoc :refs refs)
-                                 (update :eavs clojure.set/union datoms))))
+                                 (update :eavs replace-source-datoms source datoms))))
                          db
                          source->entity-maps)
         _ (disallow-conflicting-sources db-after)]
