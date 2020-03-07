@@ -161,3 +161,6 @@
   (and (= (.-e a) (.-e b))
        (= (.-a a) (.-a b))
        (not= (.-v a) (.-v b))))
+
+(defn source-equals? [source ^Datom d]
+  (identical? source (.s d)))

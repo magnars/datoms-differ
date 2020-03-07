@@ -1,7 +1,9 @@
 (ns perf
   (:require [criterium.core :as crit]
             [datoms-differ.core2 :as c2]
-            [datoms-differ.core :as c]))
+            [datoms-differ.core :as c]
+            [datoms-differ.datom :as d]
+            [me.tonsky.persistent-sorted-set :as set]))
 
 (comment
   (def history-schema
@@ -40,12 +42,18 @@
     (->> (slurp "/Users/mrundberget/projects/datoms-differ/history-entities.edn")
          (clojure.edn/read-string {})))
 
-  (let [sample-db (c2/create-conn history-schema)]
-    (println "\n********  NEW CLEAN DB  *********")
-    (time (c2/transact-sources! sample-db history-entities))
-    (println "\n********  NEW UPDATE  ***********")
-    (time (c2/transact-sources! sample-db history-entities))
-    (count (:eavs @sample-db)))
+  (def modified-moves
+    {:prepare-moves [#:move{:id "9855783-:departure-1582710092606-new", :imo "9855783", :location #:entity{:id "location/haugesund-1"}, :kind :departure, :inst #inst "2020-02-26T09:41:32.606-00:00"}
+                     #:move{:id "9855783-:arrival-1582711626542-new", :imo "9855783", :location #:entity{:id "location/røvær-1"}, :kind :arrival, :inst #inst "2020-02-26T10:07:06.542-00:00"}
+                     #:move{:id "9855783-:departure-1582713035833-new", :imo "9855783", :location #:entity{:id "location/røvær-1"}, :kind :departure, :inst #inst "2020-02-26T10:30:35.833-00:00"}]})
+
+  (dotimes [x 200]
+    (let [sample-db (c2/create-conn history-schema)]
+      (println "\n********  NEW CLEAN DB  *********")
+      (time (c2/transact-sources! sample-db history-entities))
+      (println "\n********  NEW UPDATE  ***********")
+      (time (c2/transact-sources! sample-db history-entities))
+      (count (:eavs @sample-db))))
 
   (let [sample-db (c/create-conn history-schema)]
     (println "\n********  OLD CLEAN DB  ********")
@@ -69,10 +77,16 @@
 
   (defn transact-for-existing []
     (let [db (atom @first-history-db)]
-     (c2/transact-sources! db history-entities)))
+      (c2/transact-sources! db history-entities)))
+
+  (defn transact-for-existing-small-change []
+    (let [db (atom @first-history-db)]
+      (c2/transact-sources! db modified-moves)))
+
 
   (crit/with-progress-reporting (crit/bench (transact-for-empty)))
   (crit/with-progress-reporting (crit/bench (transact-for-existing)))
+  (crit/with-progress-reporting (crit/bench (transact-for-existing-small-change)))
 
 
   ;; OLD IMPL TESTS
@@ -88,25 +102,11 @@
     (let [db (atom @first-history-db)]
       (c/transact-sources! db history-entities)))
 
+
   (crit/with-progress-reporting (crit/bench (transact-for-empty-old)))
   (crit/with-progress-reporting (crit/bench (transact-for-existing-old)))
 
   )
-
-
-(comment
-
- (let [db (empty-db history-schema)
-       attrs (:attrs db)
-       entities (doall (find-all-entities attrs (:prepare-observations history-entities)))
-       old-refs (doall (create-refs-lookup attrs (:from default-db-id-partition) default-db-id-partition {} entities))]
-
-   (time (create-refs-lookup attrs (get-lowest-new-eid default-db-id-partition (:eavs @first-history-db))  default-db-id-partition (:refs @first-history-db) entities))
-
-   #_"done")
-
- )
-
 
 (comment
   (def sample-datoms
@@ -125,5 +125,6 @@
      (d/datom 536870912 :vessel/imo "1234" :prepare-vessels)])
 
   (d/to-eavs sample-datoms)
+
 
   )

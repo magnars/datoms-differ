@@ -52,6 +52,16 @@
                         {:entity entity
                          :attrs (:identity attrs)})))))
 
+(defn select-first-entry-of [map keyseq]
+  (loop [ret nil keys (seq keyseq)]
+    (when keys
+      (if-let [entry (. clojure.lang.RT (find map (first keys)))]
+        entry
+        (recur ret (next keys))))))
+
+(defn get-entity-ref-unsafe [attrs entity-map]
+  (select-first-entry-of entity-map (:identity? attrs)))
+
 (defn reverse-ref? [k]
   (.startsWith (name k) "_"))
 
@@ -100,7 +110,7 @@
                         (when (nil? v)
                           (throw (ex-info "Attributes cannot be nil" {:entity (get-entity-ref attrs entity)
                                                                       :key k}))))
-        get-eid #(refs (get-entity-ref attrs %))]
+        get-eid #(refs (get-entity-ref-unsafe attrs %))]
     (->> all-entities
          (reduce
           (fn [acc entity]
@@ -192,19 +202,23 @@
                                                     v)]]))))))))
 
 (defn replace-source-datoms [eavs source datoms]
-  (let [[old new] (diff-sorted  (filter #(identical? (:s %) source) eavs)
-                                datoms
-                                d/cmp-datoms-eav-only)]
-    (loop [eavs (transient eavs)
+  (let [[old new] (diff-sorted (filter (partial d/source-equals? source) eavs)
+                               datoms
+                               d/cmp-datoms-eav-only)
+        transient-union (fn [s1 v2]
+                          (if (< (count s1) (count v2))
+                            (persistent! (reduce conj! (transient (d/to-eavs v2)) s1))
+                            (persistent! (reduce conj! s1 v2))))]
+    (loop [eavs-t (transient eavs)
            to-remove old
            to-add new]
       (let [r (first to-remove)
             a (first to-add)]
         (cond
-          (and r a) (recur (-> eavs (disj! r) (conj! a)) (next to-remove) (next to-add))
-          (and (nil? r) a) (into (persistent! eavs) to-add)
-          (and r (nil? a)) (persistent! (reduce disj! eavs to-remove))
-          :else (persistent! eavs))))))
+          (and r a) (recur (-> eavs-t (disj! r) (conj! a)) (next to-remove) (next to-add))
+          (and (nil? r) a) (transient-union eavs-t to-add)
+          (and r (nil? a)) (persistent! (reduce disj! eavs-t to-remove))
+          :else (persistent! eavs-t))))))
 
 (defn with-sources [db source->entity-maps]
   (let [db-after (reduce (fn [db [source entity-maps]]
