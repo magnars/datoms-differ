@@ -235,19 +235,18 @@
                                  (update :to-add into new)
                                  (assoc :refs refs)
                                  (assoc :eavs eavs))))
-                         (assoc db :to-remove [] :to-add [])
+                         (assoc db :to-remove [] :to-add [] :attrs (find-attrs (:schema db)))
                          source->entity-maps)
         _ (disallow-conflicting-sources db-after)]
     {:tx-data (create-tx-data db-after)
      :db-before db
-     :db-after (dissoc db-after :to-add :to-remove)}))
+     :db-after (dissoc db-after :attrs :to-add :to-remove)}))
 
 
 ;; TODO: Public API, maybe have internals in separate ns?
 
 (defn empty-db [schema]
   {:schema schema
-   :attrs (find-attrs schema)
    :refs {}
    :eavs (d/empty-eavs)})
 

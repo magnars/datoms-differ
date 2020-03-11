@@ -24,7 +24,6 @@
 (deftest create-conn
   (is (= @(sut/create-conn schema)
          {:schema schema
-          :attrs attrs
           :refs {}
           :eavs #{}})))
 
@@ -43,7 +42,6 @@
 
 (defn db []
   (sut/create-conn schema))
-
 
 (deftest transact!
   (testing "EMPTY DB, ONE SOURCE"
@@ -351,7 +349,6 @@
                  (d/datom 1024 :service/trips 1026 :source-2)
                  (d/datom 1025 :trip/id "bar" :source-1)
                  (d/datom 1026 :trip/id "foo" :source-2)})))))
-
 
   (testing "PREVIOUS DB, MULTIPLE SOURCES"
     (testing "Add and remove across sources"
