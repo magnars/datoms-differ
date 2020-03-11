@@ -223,16 +223,8 @@
                 (conj! acc [:db/retract (.-e d) (.-a d) (.-v d)])))
             (transient [])
             to-remove))
-   (->> to-add
-        (reduce (fn [{:keys [prev res] :as acc} ^Datom curr]
-                  (if (and prev (== 0 (d/cmp-datoms-eav-only curr prev)))
-                    (assoc! acc :prev curr)
-                    (-> acc
-                        (assoc! :prev curr)
-                        (assoc! :res (conj! res [:db/add (.-e curr) (.-a curr) (.-v curr)])))))
-                (transient {:res (transient [])}))
-        :res
-        persistent!)))
+   (for [^Datom d (d/to-eav-only to-add)]
+     [:db/add (.-e d) (.-a d) (.-v d)])))
 
 (defn with-sources [db source->entity-maps]
   (let [db-after (reduce (fn [db [source entity-maps]]
@@ -269,4 +261,7 @@
                     (reset! report r)
                     (:db-after r))))
     @report))
+
+(defn transact! [conn source entity-maps]
+  (transact-sources! conn {source entity-maps}))
 

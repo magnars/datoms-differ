@@ -158,6 +158,17 @@
     (set/from-sequential cmp-datoms-eavs datoms)
     (empty-eavs)))
 
+(defn empty-eav-only []
+  (set/sorted-set-by cmp-datoms-eav-only))
+
+(defn to-eav-only [datoms]
+  (if (seq datoms)
+    (->> datoms
+         (reduce conj! (transient []))
+         persistent!
+         (set/from-sequential cmp-datoms-eav-only))
+    (empty-eavs)))
+
 (defn diff-in-value? [^Datom a ^Datom b]
   (and (= (.-e a) (.-e b))
        (= (.-a a) (.-a b))
