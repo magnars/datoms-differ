@@ -1,6 +1,8 @@
 (ns datoms-differ.core2
   (:require [datoms-differ.datom :as d]
-            [me.tonsky.persistent-sorted-set :as set]))
+            [me.tonsky.persistent-sorted-set :as set]
+            [medley.core :refer [map-vals]])
+  (:import [datoms_differ.datom Datom]))
 
 (defn diff-sorted [a b cmp]
   (loop [only-a (transient [])
@@ -93,17 +95,19 @@
         (or (-> eavs (set/rslice nil nil) first :e) 0))))
 
 (defn create-refs-lookup [attrs lowest-new-eid {:keys [from to]} old-refs entities]
-  (let [xform (comp
-               (map #(get-entity-ref attrs %))
-               (distinct)
-               (remove old-refs)
-               (map-indexed (fn [i ref]
-                              (let [eid (+ lowest-new-eid i)]
-                                (when-not (<= from eid to)
-                                  (throw (ex-info "Generated internal eid falls outside internal db-id-partition, check :datoms-differ.core2/db-id-partition"
-                                                  {:ref ref :eid eid :internal-partition {:from from :to to}})))
-                                [ref eid]))))]
-    (into old-refs xform entities)))
+  (loop [idx lowest-new-eid
+         refs (transient old-refs)
+         entities entities]
+
+    (if-let [rf (some->> (first entities) (get-entity-ref attrs))]
+      (if (refs rf)
+        (recur idx refs (next entities))
+        (do
+          (when-not (<= from idx to)
+            (throw (ex-info "Generated internal eid falls outside internal db-id-partition, check :datoms-differ.core2/db-id-partition"
+                            {:ref rf :eid idx :internal-partition {:from from :to to}})))
+          (recur (inc idx) (assoc! refs rf idx) (next entities))))
+      (persistent! refs))))
 
 (defn flatten-all-entities [source {:keys [ref? many? component?] :as attrs} refs all-entities]
   (let [disallow-nils (fn [k v entity]
@@ -148,9 +152,9 @@
   (:conflict
    (persistent!
     (reduce
-     (fn [{:keys [prev] :as acc} curr]
+     (fn [{:keys [prev] :as acc} ^Datom curr]
        (cond
-         (many? (:a curr))
+         (many? (.-a curr))
          acc
 
          (nil? prev)
@@ -163,75 +167,88 @@
      (transient {})
      eavs))))
 
-(defn disallow-conflicting-values [refs {:keys [many?]} datoms]
-  (when-let [[e a] (find-conflicting-value many? datoms)]
-    (let [datoms (set/slice datoms (d/datom e a nil nil) (d/datom e a nil nil))]
-      (throw (ex-info "Conflicting values asserted for entity"
-                      (let [e->entity-ref (clojure.set/map-invert refs)]
-                        {:entity-ref (e->entity-ref e)
-                         :attr a
-                         :conflicting-values (into #{} (map :v datoms))}))))))
-
 (defn explode [source {:keys [schema attrs refs eavs]} entity-maps]
   (let [db-id-partition (::db-id-partition schema default-db-id-partition)
         lowest-new-eid (get-lowest-new-eid db-id-partition eavs)
         all-entities (find-all-entities attrs entity-maps)
         new-refs (create-refs-lookup attrs lowest-new-eid db-id-partition refs all-entities)
         datoms (flatten-all-entities source attrs new-refs all-entities)]
-    (disallow-conflicting-values new-refs attrs datoms)
     {:refs new-refs
      :datoms datoms}))
-
-(defn diff [datoms-before datoms-after]
-  (let [[old new] (diff-sorted datoms-before datoms-after d/cmp-datoms-eav-only)]
-    (concat
-     (for [[e a v] old] [:db/retract e a v])
-     (for [[e a v] new] [:db/add e a v]))))
 
 (defn disallow-conflicting-sources [{:keys [attrs eavs refs]}]
   (let [{:keys [many? ref?]} attrs]
     (when-let [[e a] (find-conflicting-value many? eavs)]
       (let [e->entity-ref (clojure.set/map-invert refs)
-            datoms (set/slice eavs (d/datom e a nil nil) (d/datom e a nil nil))]
+            datoms (set/slice eavs (d/datom e a nil nil) (d/datom e a nil nil))
+            v-fn (if (ref? a) (comp e->entity-ref :v) :v)]
         (throw
-         (ex-info "Conflicting values asserted between sources"
-                  (into {}
-                        (for [{:keys [e a v s]} datoms]
-                          [s [(e->entity-ref e) a (if (ref? a)
-                                                    (e->entity-ref v)
-                                                    v)]]))))))))
+         (ex-info "Conflicting values asserted for entity"
+                  {:attr a
+                   :entity-ref (e->entity-ref e)
+                   :conflict (->> datoms
+                                  (group-by :s)
+                                  (map-vals #(->> % (map v-fn) set)))}))))))
 
-(defn replace-source-datoms [eavs source datoms]
-  (let [[old new] (diff-sorted (filter (partial d/source-equals? source) eavs)
-                               datoms
-                               d/cmp-datoms-eav-only)
-        transient-union (fn [s1 v2]
+(defn calc-source-report [eavs source datoms]
+  (let [transient-union (fn [s1 v2]
                           (if (< (count s1) (count v2))
                             (persistent! (reduce conj! (transient (d/to-eavs v2)) s1))
-                            (persistent! (reduce conj! s1 v2))))]
-    (loop [eavs-t (transient eavs)
-           to-remove old
-           to-add new]
-      (let [r (first to-remove)
-            a (first to-add)]
-        (cond
-          (and r a) (recur (-> eavs-t (disj! r) (conj! a)) (next to-remove) (next to-add))
-          (and (nil? r) a) (transient-union eavs-t to-add)
-          (and r (nil? a)) (persistent! (reduce disj! eavs-t to-remove))
-          :else (persistent! eavs-t))))))
+                            (persistent! (reduce conj! s1 v2))))
+        [old new] (diff-sorted (filter (partial d/source-equals? source) eavs)
+                               datoms
+                               d/cmp-datoms-eav-only)]
+    [old new
+     (loop [eavs-t (transient eavs)
+            to-remove old
+            to-add new]
+       (let [r (first to-remove)
+             a (first to-add)]
+         (cond
+           (and r a) (recur (-> eavs-t (disj! r) (conj! a)) (next to-remove) (next to-add))
+           (and (nil? r) a) (transient-union eavs-t to-add)
+           (and r (nil? a)) (persistent! (reduce disj! eavs-t to-remove))
+           :else (persistent! eavs-t))))]))
+
+(defn create-tx-data
+  "Creates datomic transaction data from sorted sequences of add and removed calculated for each source
+   Do to potential presence of same datom present in multiple sources
+   , some additional filtering of is needed prior to generating the final tx report data"
+  [{:keys [to-remove to-add eavs]}]
+  (concat
+   (persistent!
+    (reduce (fn [acc ^Datom d]
+              (if (d/contains-eav? eavs d)
+                acc
+                (conj! acc [:db/retract (.-e d) (.-a d) (.-v d)])))
+            (transient [])
+            to-remove))
+   (->> to-add
+        (reduce (fn [{:keys [prev res] :as acc} ^Datom curr]
+                  (if (and prev (== 0 (d/cmp-datoms-eav-only curr prev)))
+                    (assoc! acc :prev curr)
+                    (-> acc
+                        (assoc! :prev curr)
+                        (assoc! :res (conj! res [:db/add (.-e curr) (.-a curr) (.-v curr)])))))
+                (transient {:res (transient [])}))
+        :res
+        persistent!)))
 
 (defn with-sources [db source->entity-maps]
   (let [db-after (reduce (fn [db [source entity-maps]]
-                           (let [{:keys [datoms refs]} (explode source db entity-maps)]
+                           (let [{:keys [datoms refs]} (explode source db entity-maps)
+                                 [old new eavs] (calc-source-report (:eavs db) source datoms)]
                              (-> db
+                                 (update :to-remove into old)
+                                 (update :to-add into new)
                                  (assoc :refs refs)
-                                 (update :eavs replace-source-datoms source datoms))))
-                         db
+                                 (assoc :eavs eavs))))
+                         (assoc db :to-remove [] :to-add [])
                          source->entity-maps)
         _ (disallow-conflicting-sources db-after)]
-    {:tx-data (diff (:eavs db) (:eavs db-after))
+    {:tx-data (create-tx-data db-after)
      :db-before db
-     :db-after db-after}))
+     :db-after (dissoc db-after :to-add :to-remove)}))
 
 
 ;; TODO: Public API, maybe have internals in separate ns?

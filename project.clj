@@ -10,5 +10,6 @@
                                   [org.clojure/tools.cli "0.4.2"] ;; for kaocha to recognize command line options
                                   [lambdaisland/kaocha "0.0-590"]
                                   [kaocha-noyoda "2019-06-03"]
-                                  [criterium "0.4.5"]]}}
+                                  [criterium "0.4.5"]
+                                  [com.taoensso/tufte "2.1.0"]]}}
   :aliases {"kaocha" ["run" "-m" "kaocha.runner"]})

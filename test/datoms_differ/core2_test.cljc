@@ -177,7 +177,7 @@
             (is (= "Conflicting values asserted for entity" (.getMessage e)))
             (is (= {:entity-ref [:route/number "100"]
                     :attr :route/name
-                    :conflicting-values #{"Stavanger-Taua" "Stavanger-Tau"}}
+                    :conflict {:prepare-routes #{"Stavanger-Taua" "Stavanger-Tau"}}}
                    (ex-data e))))))))
 
   (testing "EMPTY DB, MULTIPLE SOURCES"
@@ -215,9 +215,31 @@
                                    :vessel/name "Syken"}]})
              (is (= :should-throw :didnt))
              (catch Exception e
-               (is (= "Conflicting values asserted between sources" (.getMessage e)))
-               (is (= {:prepare-vessel [[:vessel/imo "123"] :vessel/name "Fyken"]
-                       :prepare-vessel-2 [[:vessel/imo "123"] :vessel/name "Syken"]}
+               (is (= "Conflicting values asserted for entity" (.getMessage e)))
+               (is (= {:attr :vessel/name
+                       :entity-ref [:vessel/imo "123"]
+                       :conflict {:prepare-vessel #{"Fyken"}
+                                  :prepare-vessel-2 #{"Syken"}}}
+                      (ex-data e)))))))
+
+    (testing "empty db conflicting values and sources throws"
+      (let [empty-db (sut/create-conn schema)
+            before @empty-db]
+        (try (sut/transact-sources!
+              empty-db
+              {:prepare-vessel [{:vessel/imo "123"
+                                 :vessel/name "Fyken"}]
+               :prepare-vessel-2 [{:vessel/imo "123"
+                                   :vessel/name "Syken"}
+                                  {:vessel/imo "123"
+                                   :vessel/name "Tyken"}]})
+             (is (= :should-throw :didnt))
+             (catch Exception e
+               (is (= "Conflicting values asserted for entity" (.getMessage e)))
+               (is (= {:attr :vessel/name
+                       :entity-ref [:vessel/imo "123"]
+                       :conflict {:prepare-vessel #{"Fyken"}
+                                  :prepare-vessel-2 #{"Syken" "Tyken"}}}
                       (ex-data e))))))))
 
   (testing "PREVIOUS DB, ONE SOURCE"
@@ -232,8 +254,7 @@
                         :db-after before})))
 
     (testing "Added attr to entity gives txes and new datoms"
-      (let [source->entity-maps {:prepare-routes [{:route/number "800" :route/name "Røvær"}]}
-            before-db (sut/create-conn schema)
+      (let [before-db (sut/create-conn schema)
             _ (sut/transact-sources! before-db {:prepare-routes [{:route/number "800"
                                                                   :route/name "Røvær"}]})
             before @before-db]
@@ -249,8 +270,7 @@
                                           {})})))
 
     (testing "Added new entity gives txes, new datoms and new refs"
-      (let [source->entity-maps {:prepare-routes [{:route/number "800" :route/name "Røvær"}]}
-            before-db (sut/create-conn schema)
+      (let [before-db (sut/create-conn schema)
             _ (sut/transact-sources! before-db {:prepare-routes [{:route/number "800"
                                                                   :route/name "Røvær"}]})
             before @before-db]
@@ -267,8 +287,7 @@
                                           {[:route/number "700"] 1025})})))
 
     (testing "Added new entity and remove one gives add/remove txes, new datoms and new refs"
-      (let [source->entity-maps {:prepare-routes [{:route/number "800" :route/name "Røvær"}]}
-            before-db (sut/create-conn schema)
+      (let [before-db (sut/create-conn schema)
             _ (sut/transact-sources! before-db {:prepare-routes [{:route/number "800"
                                                                   :route/name "Røvær"}]})
             before @before-db]
@@ -283,5 +302,55 @@
                                          :eavs #{(d/datom 1025 :route/number "700" :prepare-routes)
                                                  (d/datom 1025 :route/name "Døvær" :prepare-routes)}
                                          :refs {[:route/number "700"] 1025
-                                                [:route/number "800"] 1024})})))))
+                                                [:route/number "800"] 1024})}))))
+
+  (testing "PREVIOUS DB, MULTIPLE SOURCES"
+    (testing "Add and remove across sources"
+      (let [before-db (sut/create-conn schema)
+            _ (sut/transact-sources! before-db {:prepare-vessels [{:vessel/imo "123"
+                                                                   :vessel/name "Fyken"}
+                                                                  {:vessel/imo "234"
+                                                                   :vessel/name "Syken"}]
+                                                :prepare-services [{:service/id :s123
+                                                                    :service/allocated-vessel {:vessel/imo "123"}
+                                                                    :service/label "fast"}
+                                                                   {:service/id :s234
+                                                                    :service/allocated-vessel {:vessel/imo "234"}
+                                                                    :service/label "slow"}]})
+            before @before-db]
+        (assert-report (sut/transact-sources! before-db {:prepare-vessels [{:vessel/imo "234"
+                                                                            :vessel/name "Tyken"}
+                                                                           {:vessel/imo "345"
+                                                                            :vessel/name "Titanic"}]
+                                                         :prepare-services [{:service/id :s123
+                                                                             :service/allocated-vessel {:vessel/imo "123"}
+                                                                             :service/label "fast"}
+                                                                            {:service/id :s234
+                                                                             :service/allocated-vessel {:vessel/imo "345"}
+                                                                             :service/label "slow"}]})
+                       {:tx-data [[:db/retract 1024 :vessel/name "Fyken"]
+                                  [:db/retract 1025 :vessel/name "Syken"]
+                                  [:db/retract 1027 :service/allocated-vessel 1025]
+                                  [:db/add 1025 :vessel/name "Tyken"]
+                                  [:db/add 1027 :service/allocated-vessel 1028]
+                                  [:db/add 1028 :vessel/imo "345"]
+                                  [:db/add 1028 :vessel/name "Titanic"]]
+                        :db-before before
+                        :db-after {:eavs #{(d/datom 1024 :vessel/imo "123" :prepare-services)
+                                           (d/datom 1025 :vessel/imo "234" :prepare-vessels)
+                                           (d/datom 1025 :vessel/name "Tyken" :prepare-vessels)
+                                           (d/datom 1026 :service/allocated-vessel 1024 :prepare-services)
+                                           (d/datom 1026 :service/id :s123 :prepare-services)
+                                           (d/datom 1026 :service/label "fast" :prepare-services)
+                                           (d/datom 1027 :service/allocated-vessel 1028 :prepare-services)
+                                           (d/datom 1027 :service/id :s234 :prepare-services)
+                                           (d/datom 1027 :service/label "slow" :prepare-services)
+                                           (d/datom 1028 :vessel/imo "345" :prepare-services)
+                                           (d/datom 1028 :vessel/imo "345" :prepare-vessels)
+                                           (d/datom 1028 :vessel/name "Titanic" :prepare-vessels)}
+                                   :refs {[:vessel/imo "123"] 1024
+                                          [:vessel/imo "234"] 1025
+                                          [:service/id :s123] 1026
+                                          [:service/id :s234] 1027
+                                          [:vessel/imo "345"] 1028}}})))))
 

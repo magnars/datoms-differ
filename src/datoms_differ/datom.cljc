@@ -43,6 +43,7 @@
 
 (defn ^Datom datom [e a v s] (Datom. e a v s 0))
 
+
 (defn- hash-datom [^Datom d]
   (-> (hash (.-e d))
       (combine-hashes (hash (.-a d)))
@@ -164,3 +165,8 @@
 
 (defn source-equals? [source ^Datom d]
   (identical? source (.s d)))
+
+(defn contains-eav? [eavs ^Datom d]
+  (set/slice eavs
+             (datom (.-e d) (.-a d) (.-v d) nil)
+             (datom (.-e d) (.-a d) (.-v d) nil)))

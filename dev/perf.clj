@@ -3,7 +3,9 @@
             [datoms-differ.core2 :as c2]
             [datoms-differ.core :as c]
             [datoms-differ.datom :as d]
-            [me.tonsky.persistent-sorted-set :as set]))
+            [medley.core :ref [map-vals]]
+            [me.tonsky.persistent-sorted-set :as set]
+            [taoensso.tufte :as tufte]))
 
 (comment
   (def history-schema
@@ -47,13 +49,27 @@
                      #:move{:id "9855783-:arrival-1582711626542-new", :imo "9855783", :location #:entity{:id "location/røvær-1"}, :kind :arrival, :inst #inst "2020-02-26T10:07:06.542-00:00"}
                      #:move{:id "9855783-:departure-1582713035833-new", :imo "9855783", :location #:entity{:id "location/røvær-1"}, :kind :departure, :inst #inst "2020-02-26T10:30:35.833-00:00"}]})
 
+
+  ;; profiling
+  (tufte/add-basic-println-handler!
+   {:format-pstats-opts {:columns [:n-calls :p50 :p90 :mean :clock :total]
+                         :format-id-fn name}})
+
+  (tufte/profile {}
+                 (dotimes [i 50]
+                   (tufte/p :transact (transact-for-lots-off-add-and-remove))))
+
+
   (dotimes [x 200]
     (let [sample-db (c2/create-conn history-schema)]
       (println "\n********  NEW CLEAN DB  *********")
       (time (c2/transact-sources! sample-db history-entities))
       (println "\n********  NEW UPDATE  ***********")
       (time (c2/transact-sources! sample-db history-entities))
-      (count (:eavs @sample-db))))
+      (println "\n********  NEW TINY UPDATE  ***********")
+      (time (c2/transact-sources! sample-db modified-moves))
+      (count (:eavs @sample-db)))
+    )
 
   (let [sample-db (c/create-conn history-schema)]
     (println "\n********  OLD CLEAN DB  ********")
@@ -83,6 +99,15 @@
     (let [db (atom @first-history-db)]
       (c2/transact-sources! db modified-moves)))
 
+  (def observations (->> (:prepare-observations history-entities) (drop 700) (take 100)))
+  (defn transact-for-lots-off-add-and-remove []
+    (let [db (atom @first-history-db)]
+      (c2/transact-sources! db {:prepare-observations observations})))
+
+  (crit/quick-bench (transact-for-empty))
+  (crit/quick-bench (transact-for-existing))
+  (crit/quick-bench (transact-for-existing-small-change))
+  (crit/quick-bench (transact-for-lots-off-add-and-remove))
 
   (crit/with-progress-reporting (crit/bench (transact-for-empty)))
   (crit/with-progress-reporting (crit/bench (transact-for-existing)))
@@ -99,12 +124,16 @@
     (c/transact-sources! (c/create-conn history-schema) history-entities))
 
   (defn transact-for-existing-old []
-    (let [db (atom @first-history-db)]
+    (let [db (atom @first-history-db-old)]
       (c/transact-sources! db history-entities)))
 
+  (defn transact-for-existing-old-small-change []
+    (let [db (atom @first-history-db-old)]
+      (c/transact-sources! db modified-moves)))
 
   (crit/with-progress-reporting (crit/bench (transact-for-empty-old)))
   (crit/with-progress-reporting (crit/bench (transact-for-existing-old)))
+  (crit/with-progress-reporting (crit/bench (transact-for-existing-old-small-change)))
 
   )
 
@@ -125,6 +154,5 @@
      (d/datom 536870912 :vessel/imo "1234" :prepare-vessels)])
 
   (d/to-eavs sample-datoms)
-
 
   )
