@@ -27,7 +27,7 @@
           :refs {}
           :eavs #{}})))
 
-(defn assert-report-2 [report {:keys [tx-data refs eavs refs-added eavs-added]}]
+(defn assert-report [report {:keys [tx-data refs eavs refs-added eavs-added]}]
   (when tx-data (is (= (:tx-data report) tx-data) "Difference in tx-data"))
   (when refs (is (= (-> report :db-after :refs) refs) "Difference in refs"))
   (when eavs (is (= (-> report :db-after :eavs) eavs) "Difference in eavs"))
@@ -41,22 +41,22 @@
         "Difference in eavs (added)")))
 
 (defn db []
-  (sut/create-conn schema))
+  @(sut/create-conn schema))
 
-(deftest transact!
+(deftest with
   (testing "EMPTY DB, ONE SOURCE"
 
     (testing "empty db no entities returns same"
-      (let [empty-db (sut/create-conn schema)]
-        (is (= (sut/transact! empty-db :prepare [])
+      (let [empty-db (db)]
+        (is (= (sut/with empty-db :prepare [])
                {:tx-data []
-                :db-before @empty-db
-                :db-after @empty-db}))))
+                :db-before empty-db
+                :db-after empty-db}))))
 
     (testing "empty db one entity"
-      (assert-report-2
-       (sut/transact! (db) :prepare-routes [{:route/number "800"
-                                             :route/name "Røvær"}])
+      (assert-report
+       (sut/with (db) :prepare-routes [{:route/number "800"
+                                        :route/name "Røvær"}])
        {:tx-data [[:db/add 1024 :route/name "Røvær"]
                   [:db/add 1024 :route/number "800"]]
         :eavs #{(d/datom 1024 :route/number "800" :prepare-routes)
@@ -64,9 +64,9 @@
         :refs {[:route/number "800"] 1024}}))
 
     (testing "empty db one entity and cardinality many"
-      (assert-report-2
-       (sut/transact! (db) :prepare-routes [{:route/number "800"
-                                             :route/tags #{:tag-1 :tag-2}}])
+      (assert-report
+       (sut/with (db) :prepare-routes [{:route/number "800"
+                                        :route/tags #{:tag-1 :tag-2}}])
 
        {:tx-data [[:db/add 1024 :route/number "800"]
                   [:db/add 1024 :route/tags :tag-1]
@@ -78,12 +78,12 @@
         :refs {[:route/number "800"] 1024}}))
 
     (testing "empty db one entity with nested entities"
-      (assert-report-2
-       (sut/transact! (db)
-                      :prepare-routes [{:route/number "800"
-                                        :route/name "Røvær"
-                                        :route/services [{:service/id :service-1
-                                                          :service/label "service-label"}]}])
+      (assert-report
+       (sut/with (db)
+                 :prepare-routes [{:route/number "800"
+                                   :route/name "Røvær"
+                                   :route/services [{:service/id :service-1
+                                                     :service/label "service-label"}]}])
 
        {:tx-data [[:db/add 1024 :route/name "Røvær"]
                   [:db/add 1024 :route/number "800"]
@@ -99,8 +99,8 @@
                [:service/id :service-1] 1025}}))
 
     (testing "empty db - reverse entity-ref, isn't component"
-      (assert-report-2
-       (sut/transact!
+      (assert-report
+       (sut/with
         (db)
         :prepare-routes [{:vessel/imo "123"
                           :service/_allocated-vessel [{:service/id :s567}]}])
@@ -115,8 +115,8 @@
                [:service/id :s567] 1025}}))
 
     (testing "empty db - reverse entity-ref, is component"
-      (assert-report-2
-       (sut/transact!
+      (assert-report
+       (sut/with
         (db)
         :prepare-routes [{:trip/id "foo"
                           :service/_trips {:service/id :s567}}])
@@ -131,8 +131,8 @@
                [:service/id :s567] 1025}}))
 
     (testing "empty-db - reverse refs multiple levels"
-      (assert-report-2
-       (sut/transact!
+      (assert-report
+       (sut/with
         (db)
         :prep [{:vessel/imo "123"
                 :service/_allocated-vessel [{:service/id :s567
@@ -172,29 +172,29 @@
 
     (testing "empty db - nil val for attr throws"
       (is (thrown? Exception
-                   (sut/transact! (db) :prepare-routes [{:route/number "100"
-                                                         :route/name nil}]))))
+                   (sut/with (db) :prepare-routes [{:route/number "100"
+                                                    :route/name nil}]))))
 
     (testing "Running out of eids for db-id-partition throws"
       (let [db (sut/create-conn (assoc schema ::sut/db-id-partition {:from 1 :to 2}))]
         (try
-          (sut/transact! db :prep [{:vessel/imo "123"}
-                                   {:vessel/imo "234"}
-                                   {:vessel/imo "345"}])
+          (sut/with @db :prep [{:vessel/imo "123"}
+                               {:vessel/imo "234"}
+                               {:vessel/imo "345"}])
           (is (= :should-throw :didnt))
           (catch Exception e
             (is (str/starts-with? (.getMessage e) "Generated internal eid falls outside internal db-id-partition,"))))))
 
     (testing "empty db - entity without identity attributes throws"
       (is (thrown? Exception
-                   (sut/transact! (db) :prepare-routes [{}])))
+                   (sut/with (db) :prepare-routes [{}])))
       (is (thrown? Exception
-                   (sut/transact! (db) :prepare-routes [{:route/name "Dufus"}]))))
+                   (sut/with (db) :prepare-routes [{:route/name "Dufus"}]))))
 
     (testing "conflicting values for entity attr throws"
       (try
-        (sut/transact! (db) :prepare-routes [{:route/number "100" :route/name "Stavanger-Taua"}
-                                            {:route/number "100" :route/name "Stavanger-Tau"}])
+        (sut/with (db) :prepare-routes [{:route/number "100" :route/name "Stavanger-Taua"}
+                                        {:route/number "100" :route/name "Stavanger-Tau"}])
         (is (= :should-throw :didnt))
         (catch Exception e
           (is (= "Conflicting values asserted for entity" (.getMessage e)))
@@ -205,24 +205,20 @@
 
   (testing "PREVIOUS DB, ONE SOURCE"
     (testing "Same entitie(s) gives no diff"
-      (let [before-db (db)
-            _ (sut/transact! before-db :prepare-routes [{:route/number "800" :route/name "Røvær"}])
-            before @before-db]
-        (assert-report-2
-         (sut/transact! before-db :prepare-routes [{:route/number "800" :route/name "Røvær"}])
+      (let [{:keys [db-after]} (sut/with (db) :prepare-routes [{:route/number "800" :route/name "Røvær"}])]
+        (assert-report
+         (sut/with db-after :prepare-routes [{:route/number "800" :route/name "Røvær"}])
          {:tx-data []
-          :refs (:refs before)
-          :eavs (:eavs before)})))
+          :refs (:refs db-after)
+          :eavs (:eavs db-after)})))
 
     (testing "Added attr to entity gives txes and new datoms"
-      (let [before-db (db)
-            _ (sut/transact! before-db :prepare-routes [{:route/number "800"
-                                                         :route/name "Røvær"}])
-            before @before-db]
-        (assert-report-2
-         (sut/transact! before-db :prepare-routes [{:route/number "800"
-                                                    :route/name "Røvær"
-                                                    :route/tags #{:tag-1 :tag-2}}])
+      (let [{:keys [db-after]} (sut/with (db) :prepare-routes [{:route/number "800"
+                                                                :route/name "Røvær"}])]
+        (assert-report
+         (sut/with db-after :prepare-routes [{:route/number "800"
+                                              :route/name "Røvær"
+                                              :route/tags #{:tag-1 :tag-2}}])
 
          {:tx-data [[:db/add 1024 :route/tags :tag-1]
                     [:db/add 1024 :route/tags :tag-2]]
@@ -231,15 +227,13 @@
           :refs-added {}})))
 
     (testing "Added new entity gives txes, new datoms and new refs"
-      (let [before-db (db)
-            _ (sut/transact! before-db :prepare-routes [{:route/number "800"
-                                                         :route/name "Røvær"}])
-            before @before-db]
-        (assert-report-2
-         (sut/transact! before-db :prepare-routes [{:route/number "800"
-                                                    :route/name "Røvær"}
-                                                   {:route/number "700"
-                                                    :route/name "Døvær"}])
+      (let [{:keys [db-after]} (sut/with (db) :prepare-routes [{:route/number "800"
+                                                                :route/name "Røvær"}])]
+        (assert-report
+         (sut/with db-after :prepare-routes [{:route/number "800"
+                                              :route/name "Røvær"}
+                                             {:route/number "700"
+                                              :route/name "Døvær"}])
 
          {:tx-data [[:db/add 1025 :route/name "Døvær"]
                     [:db/add 1025 :route/number "700"]]
@@ -248,13 +242,11 @@
           :refs-added {[:route/number "700"] 1025}})))
 
     (testing "Added new entity and remove one gives add/remove txes, new datoms and new refs"
-      (let [before-db (db)
-            _ (sut/transact! before-db :prepare-routes [{:route/number "800"
-                                                         :route/name "Røvær"}])
-            before @before-db]
-        (assert-report-2
-         (sut/transact! before-db :prepare-routes [{:route/number "700"
-                                                    :route/name "Døvær"}])
+      (let [{:keys [db-after]} (sut/with (db) :prepare-routes [{:route/number "800"
+                                                                :route/name "Røvær"}])]
+        (assert-report
+         (sut/with db-after :prepare-routes [{:route/number "700"
+                                              :route/name "Døvær"}])
 
          {:tx-data [[:db/retract 1024 :route/name "Røvær"]
                     [:db/retract 1024 :route/number "800"]
@@ -265,36 +257,34 @@
           :refs-added {[:route/number "700"] 1025
                        [:route/number "800"] 1024}})))))
 
-(deftest transact-sources!
+(deftest with-sources
   (testing "EMPTY DB, MULTIPLE SOURCES"
     (testing "empty db two sources "
-      (let [empty-db (sut/create-conn schema)
-            before @empty-db]
-        (assert-report-2
-         (sut/transact-sources!
-          (db)
-          {:prepare-routes [{:vessel/imo "123"
-                             :vessel/name "Fyken"}]
-           :prepare-services [{:service/id :s123
-                               :service/allocated-vessel {:vessel/imo "123"}}]})
+      (assert-report
+       (sut/with-sources
+         (db)
+         {:prepare-routes [{:vessel/imo "123"
+                            :vessel/name "Fyken"}]
+          :prepare-services [{:service/id :s123
+                              :service/allocated-vessel {:vessel/imo "123"}}]})
 
-         {:tx-data [[:db/add 1024 :vessel/imo "123"]
-                    [:db/add 1024 :vessel/name "Fyken"]
-                    [:db/add 1025 :service/allocated-vessel 1024]
-                    [:db/add 1025 :service/id :s123]]
-          :eavs #{(d/datom 1024 :vessel/imo "123" :prepare-routes)
-                  (d/datom 1024 :vessel/name "Fyken" :prepare-routes)
-                  (d/datom 1025 :service/id :s123 :prepare-services)
-                  (d/datom 1025 :service/allocated-vessel 1024 :prepare-services)
-                  (d/datom 1024 :vessel/imo "123" :prepare-services)}
-          :refs {[:vessel/imo "123"] 1024
-                 [:service/id :s123] 1025}})))
+       {:tx-data [[:db/add 1024 :vessel/imo "123"]
+                  [:db/add 1024 :vessel/name "Fyken"]
+                  [:db/add 1025 :service/allocated-vessel 1024]
+                  [:db/add 1025 :service/id :s123]]
+        :eavs #{(d/datom 1024 :vessel/imo "123" :prepare-routes)
+                (d/datom 1024 :vessel/name "Fyken" :prepare-routes)
+                (d/datom 1025 :service/id :s123 :prepare-services)
+                (d/datom 1025 :service/allocated-vessel 1024 :prepare-services)
+                (d/datom 1024 :vessel/imo "123" :prepare-services)}
+        :refs {[:vessel/imo "123"] 1024
+               [:service/id :s123] 1025}}))
 
     (testing "empty db conflicting sources throws"
-      (try (sut/transact-sources!
-            (db)
-            {:prepare-vessel [{:vessel/imo "123" :vessel/name "Fyken"}]
-             :prepare-vessel-2 [{:vessel/imo "123" :vessel/name "Syken"}]})
+      (try (sut/with-sources
+             (db)
+             {:prepare-vessel [{:vessel/imo "123" :vessel/name "Fyken"}]
+              :prepare-vessel-2 [{:vessel/imo "123" :vessel/name "Syken"}]})
            (is (= :should-throw :didnt))
            (catch Exception e
              (is (= "Conflicting values asserted for entity" (.getMessage e)))
@@ -305,10 +295,10 @@
                     (ex-data e))))))
 
     (testing "empty db conflicting sources throws"
-      (try (sut/transact-sources!
-            (db)
-            {:prepare-vessel [{:vessel/imo "123" :vessel/name "Fyken"}]
-             :prepare-vessel-2 [{:vessel/imo "123" :vessel/name "Syken"}]})
+      (try (sut/with-sources
+             (db)
+             {:prepare-vessel [{:vessel/imo "123" :vessel/name "Fyken"}]
+              :prepare-vessel-2 [{:vessel/imo "123" :vessel/name "Syken"}]})
            (is (= :should-throw :didnt))
            (catch Exception e
              (is (= "Conflicting values asserted for entity" (.getMessage e)))
@@ -319,10 +309,10 @@
                     (ex-data e))))))
 
     (testing "empty db conflicting values throws and includes entity ref for refs"
-      (try (sut/transact-sources!
-            (db)
-            {:source-1 [{:service/id :s567 :service/allocated-vessel {:vessel/imo "123"}}]
-             :source-2 [{:service/id :s567 :service/allocated-vessel {:vessel/imo "456"}}]})
+      (try (sut/with-sources
+             (db)
+             {:source-1 [{:service/id :s567 :service/allocated-vessel {:vessel/imo "123"}}]
+              :source-2 [{:service/id :s567 :service/allocated-vessel {:vessel/imo "456"}}]})
            (is (= :should-throw :didnt))
            (catch Exception e
              (is (= "Conflicting values asserted for entity" (.getMessage e)))
@@ -337,10 +327,9 @@
             tx-source-1 [{:service/id :s567 :service/trips #{{:trip/id "bar"}}}]
             tx-source-2 [{:service/id :s567 :service/trips #{{:trip/id "foo"}}}]]
         (is (= (-> db-at-first
-                   (sut/transact! :source-1 tx-source-1)
+                   (sut/with :source-1 tx-source-1)
                    :db-after
-                   (atom)
-                   (sut/transact! :source-2 tx-source-2)
+                   (sut/with :source-2 tx-source-2)
                    :db-after
                    :eavs)
                #{(d/datom 1024 :service/id :s567 :source-1)
@@ -352,29 +341,27 @@
 
   (testing "PREVIOUS DB, MULTIPLE SOURCES"
     (testing "Add and remove across sources"
-      (let [before-db (sut/create-conn schema)
-            _ (sut/transact-sources! before-db {:prepare-vessels [{:vessel/imo "123"
-                                                                   :vessel/name "Fyken"}
-                                                                  {:vessel/imo "234"
-                                                                   :vessel/name "Syken"}]
-                                                :prepare-services [{:service/id :s123
-                                                                    :service/allocated-vessel {:vessel/imo "123"}
-                                                                    :service/label "fast"}
-                                                                   {:service/id :s234
-                                                                    :service/allocated-vessel {:vessel/imo "234"}
-                                                                    :service/label "slow"}]})
-            before @before-db]
-        (assert-report-2
-         (sut/transact-sources! before-db {:prepare-vessels [{:vessel/imo "234"
-                                                              :vessel/name "Tyken"}
-                                                             {:vessel/imo "345"
-                                                              :vessel/name "Titanic"}]
-                                           :prepare-services [{:service/id :s123
-                                                               :service/allocated-vessel {:vessel/imo "123"}
-                                                               :service/label "fast"}
-                                                              {:service/id :s234
-                                                               :service/allocated-vessel {:vessel/imo "345"}
-                                                               :service/label "slow"}]})
+      (let [{:keys [db-after]} (sut/with-sources (db) {:prepare-vessels [{:vessel/imo "123"
+                                                                          :vessel/name "Fyken"}
+                                                                         {:vessel/imo "234"
+                                                                          :vessel/name "Syken"}]
+                                                       :prepare-services [{:service/id :s123
+                                                                           :service/allocated-vessel {:vessel/imo "123"}
+                                                                           :service/label "fast"}
+                                                                          {:service/id :s234
+                                                                           :service/allocated-vessel {:vessel/imo "234"}
+                                                                           :service/label "slow"}]})]
+        (assert-report
+         (sut/with-sources db-after {:prepare-vessels [{:vessel/imo "234"
+                                                        :vessel/name "Tyken"}
+                                                       {:vessel/imo "345"
+                                                        :vessel/name "Titanic"}]
+                                     :prepare-services [{:service/id :s123
+                                                         :service/allocated-vessel {:vessel/imo "123"}
+                                                         :service/label "fast"}
+                                                        {:service/id :s234
+                                                         :service/allocated-vessel {:vessel/imo "345"}
+                                                         :service/label "slow"}]})
 
          {:tx-data [[:db/retract 1024 :vessel/name "Fyken"]
                     [:db/retract 1025 :vessel/name "Syken"]
@@ -401,3 +388,74 @@
                  [:service/id :s234] 1027
                  [:vessel/imo "345"] 1028}})))))
 
+(deftest transact!
+  (testing "transact! works as with only wrapped with an atom"
+    (assert-report
+     (sut/transact! (atom (db)) :dummy [{:vessel/imo "100"}])
+
+     {:eavs #{(d/datom 1024 :vessel/imo "100" :dummy)}
+      :refs {[:vessel/imo "100"] 1024}})))
+
+(deftest transact-sources!
+  (testing "transact-sources! works as with-sources only wrapped with an atom"
+    (assert-report
+     (sut/transact-sources! (atom (db)) {:dummy [{:vessel/imo "100"}]})
+
+     {:eavs #{(d/datom 1024 :vessel/imo "100" :dummy)}
+      :refs {[:vessel/imo "100"] 1024}})))
+
+(deftest explode
+  (testing "explode happy days"
+    (is (= (sut/explode schema [{:vessel/imo "123" :vessel/name "Fyken"}])
+           {:refs {[:vessel/imo "123"] 1024}
+            :datoms [[1024 :vessel/imo "123"]
+                     [1024 :vessel/name "Fyken"]]})))
+
+  (testing "explode throws on conflicting values for attribute"
+    (try (sut/explode schema [{:vessel/imo "123" :vessel/name "Fyken"}
+                              {:vessel/imo "123" :vessel/name "Syken"}])
+         (is (= :should-throw :didnt))
+         (catch Exception e
+           (is (= "Conflicting values asserted for entity" (.getMessage e)))
+           (is (= {:attr :vessel/name
+                   :entity-ref [:vessel/imo "123"]
+                   :conflicting-values #{"Fyken" "Syken"}}
+                  (ex-data e))))))
+
+  (testing "explode throws on conflicting refs and contains lookup-refs in ex"
+    (try (sut/explode schema [{:service/id :s567 :service/allocated-vessel {:vessel/imo "123"}}
+                              {:service/id :s567 :service/allocated-vessel {:vessel/imo "456"}}])
+         (is (= :should-throw :didnt))
+         (catch Exception e
+           (is (= "Conflicting values asserted for entity" (.getMessage e)))
+           (is (= {:attr :service/allocated-vessel
+                   :entity-ref [:service/id :s567]
+                   :conflicting-values #{[:vessel/imo "123"] [:vessel/imo "456"]}}
+                  (ex-data e)))))))
+
+(deftest get-datoms []
+  (testing "Get all datoms for db with one source"
+    (is (= (-> (sut/with (db) :dummy [{:vessel/imo "123" :vessel/name "Fyken"}
+                                      {:vessel/imo "234" :vessel/name "Syken"}])
+               :db-after
+               sut/get-datoms)
+           [[1024 :vessel/imo "123"]
+            [1024 :vessel/name "Fyken"]
+            [1025 :vessel/imo "234"]
+            [1025 :vessel/name "Syken"]])))
+
+  (testing "Get all datoms for db with multiple sources"
+    (is (= (-> (sut/with-sources (db) {:source-1 [{:vessel/imo "123" :vessel/name "Fyken"}
+                                                  {:vessel/imo "234" :vessel/name "Syken"}]
+                                       :source-2 [{:service/id :s1 :service/allocated-vessel {:vessel/imo "123"}}
+                                                  {:service/id :s2 :service/allocated-vessel {:vessel/imo "234"}}]})
+               :db-after
+               sut/get-datoms)
+           [[1024 :vessel/imo "123"]
+            [1024 :vessel/name "Fyken"]
+            [1025 :vessel/imo "234"]
+            [1025 :vessel/name "Syken"]
+            [1026 :service/allocated-vessel 1024]
+            [1026 :service/id :s1]
+            [1027 :service/allocated-vessel 1025]
+            [1027 :service/id :s2]]))))
