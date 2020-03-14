@@ -56,7 +56,7 @@
                         {:entity entity
                          :attrs (:identity attrs)})))))
 
-(defn select-first-entry-of [map keyseq]
+(defn- select-first-entry-of [map keyseq]
   (loop [ret nil keys (seq keyseq)]
     (when keys
       (if-let [entry (. clojure.lang.RT (find map (first keys)))]

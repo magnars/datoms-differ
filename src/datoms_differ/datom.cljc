@@ -101,7 +101,6 @@
 (defn ^Datom datom-from-reader [vec]
   (apply datom vec))
 
-
 ;; Comparing datoms
 #?(:clj
    (defmacro combine-cmp [& comps]
@@ -116,39 +115,34 @@
                c#)))
          res))))
 
+(defprotocol DatomValueComparator
+  "A protocol that allows you to provide custom compare for types of your choosing for the value attribute of a datom"
+  (customCompareTo [this other]))
+
 (defn cmp [o1 o2]
   (if (nil? o1) 0
       (if (nil? o2) 0
           (compare o1 o2))))
 
+(defn custom-value-cmp [v1 v2]
+  ;; satisfies? would have made sense here, but it's painfully slow in such a hot path as this.
+  ;; There's a ticket waiting to address this: https://clojure.atlassian.net/browse/CLJ-1814
+  (if (extends? DatomValueComparator (type v1))
+    (customCompareTo v1 v2)
+    (cmp v1 v2)))
+
 (defn cmp-datoms-eavs [^Datom d1, ^Datom d2]
   (combine-cmp
    (#?(:clj Integer/compare :cljs -) (.-e d1) (.-e d2))
    (cmp (.-a d1) (.-a d2))
-   (cmp (.-v d1) (.-v d2))
+   (custom-value-cmp (.-v d1) (.-v d2))
    (cmp (.-s d1) (.-s d2))))
 
 (defn cmp-datoms-eav-only [^Datom d1, ^Datom d2]
   (combine-cmp
    (#?(:clj Integer/compare :cljs -) (.-e d1) (.-e d2))
    (cmp (.-a d1) (.-a d2))
-   (cmp (.-v d1) (.-v d2))))
-
-(defn- cmp-attr-quick [a1 a2]
-  ;; either both are keywords or both are strings
-  #?(:cljs
-     (if (keyword? a1)
-       (-compare a1 a2)
-       (garray/defaultCompare a1 a2))
-     :clj
-     (.compareTo ^Comparable a1 a2)))
-
-(defn cmp-datoms-eavs-quick [^Datom d1, ^Datom d2]
-  (combine-cmp
-   (#?(:clj Integer/compare :cljs -) (.-e d1) (.-e d2))
-   (cmp-attr-quick (.-a d1) (.-a d2))
-   (compare (.-v d1) (.-v d2))
-   (cmp-attr-quick (.-s d1) (.-s d2))))
+   (custom-value-cmp (.-v d1) (.-v d2))))
 
 (defn empty-eavs []
   (set/sorted-set-by cmp-datoms-eavs))
