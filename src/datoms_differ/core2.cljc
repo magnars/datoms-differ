@@ -1,5 +1,6 @@
 (ns datoms-differ.core2
   (:require [datoms-differ.datom :as d]
+            [datoms-differ.export :as dd-export]
             [me.tonsky.persistent-sorted-set :as set]
             [medley.core :refer [map-vals]])
   (:import [datoms_differ.datom Datom]))
@@ -302,3 +303,18 @@
   (->> (:eavs db)
        (d/to-eav-only)
        (map (fn [^Datom d] [(.-e d) (.-a d) (.-v d)]))))
+
+(defn export-db
+  "Export database to DataScript. Gives you a string that can be read by clojurescript (when datascript is loaded) to create a datascript db."
+  [{:keys [schema] :as db}]
+  (println {:start-tx (inc (:to default-db-id-partition))
+            :partition-key ::db-id-partition})
+  (dd-export/export (dd-export/prep-for-datascript schema)
+                    (get-datoms db)
+                    :start-tx (inc (:to default-db-id-partition))
+                    :partition-key ::db-id-partition))
+
+(def
+  ^{:doc "Remove retractions of values that are later asserted in tx-data"
+    :arglists '([schema tx-data])}
+  prune-diffs dd-export/prune-diffs)

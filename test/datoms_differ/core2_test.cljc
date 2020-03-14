@@ -459,3 +459,32 @@
             [1026 :service/id :s1]
             [1027 :service/allocated-vessel 1025]
             [1027 :service/id :s2]]))))
+
+(deftest export-db
+  (testing "Export db regression test"
+    (let [{:keys [db-after]} (sut/with (db) :dummy [{:vessel/imo "123" :vessel/name "Fyken"}])]
+      (is (= (sut/export-db db-after)
+             (str "#datascript/DB {"
+                  ":schema "
+                  "{:route/tags #:db{:cardinality :db.cardinality/many},"
+                  " :service/label {},"
+                  " :route/name {},"
+                  " :trip/id #:db{:unique :db.unique/identity},"
+                  " :vessel/imo #:db{:unique :db.unique/identity},"
+                  " :service/trips #:db{:valueType :db.type/ref, :cardinality :db.cardinality/many, :isComponent true},"
+                  " :vessel/name {},"
+                  " :route/services #:db{:valueType :db.type/ref, :cardinality :db.cardinality/many},"
+                  " :service/allocated-vessel #:db{:valueType :db.type/ref, :cardinality :db.cardinality/one},"
+                  " :route/number #:db{:unique :db.unique/identity},"
+                  " :service/id #:db{:unique :db.unique/identity}}, "
+                  ":datoms "
+                  "[[1024 :vessel/imo \"123\" 536870912]"
+                  " [1024 :vessel/name \"Fyken\" 536870912]]"
+                  "}"))))))
+
+(deftest prune-diffs
+  (testing "Prune diffs regression test"
+    (is (= (sut/prune-diffs schema
+                            [[:db/retract 2025 :service/allocated-vessel 2026]
+                             [:db/add 2025 :service/allocated-vessel 2027]])
+           [[:db/add 2025 :service/allocated-vessel 2027]]))))

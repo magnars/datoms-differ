@@ -4,10 +4,12 @@
 
 (def tx0 (inc (:to datoms-differ.core/default-db-id-partition)))
 
-(defn export [schema datoms]
+(defn export [schema datoms & {:keys [partition-key start-tx]
+                               :or {partition-key :datoms-differ.core/db-id-partition
+                                    start-tx tx0}}]
   (str "#datascript/DB "
-       (pr-str {:schema (dissoc schema :datoms-differ.core/db-id-partition)
-                :datoms (into [] (map #(conj % tx0)) datoms)})))
+       (pr-str {:schema (dissoc schema partition-key)
+                :datoms (into [] (map #(conj % start-tx)) datoms)})))
 
 
 (defn prep-for-datascript
@@ -29,3 +31,4 @@
               (and (= :db/retract op)
                    (overwriting-additions [eid attr])))
             tx-data)))
+
