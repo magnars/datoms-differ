@@ -1,5 +1,6 @@
 (ns datoms-differ.export
-  (:require [datoms-differ.core :refer [get-datoms find-attrs]]
+  (:require [datoms-differ.core :refer [get-datoms]]
+            [datoms-differ.impl.core-helpers :as ch]
             [medley.core :refer [filter-keys map-vals]]))
 
 (def tx0 (inc (:to datoms-differ.core/default-db-id-partition)))
@@ -21,7 +22,7 @@
   (export (prep-for-datascript (:schema db)) (get-datoms db)))
 
 (defn prune-diffs [schema tx-data]
-  (let [{:keys [many?]} (find-attrs schema)
+  (let [{:keys [many?]} (ch/find-attrs schema)
         overwriting-additions (set (keep (fn [[op eid attr]]
                                            (when (and (= :db/add op)
                                                       (not (many? attr)))

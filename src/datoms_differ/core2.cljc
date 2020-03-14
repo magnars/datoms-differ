@@ -1,6 +1,7 @@
 (ns datoms-differ.core2
   (:require [datoms-differ.datom :as d]
             [datoms-differ.export :as dd-export]
+            [datoms-differ.impl.core-helpers :as ch]
             [me.tonsky.persistent-sorted-set :as set]
             [medley.core :refer [map-vals]])
   (:import [datoms_differ.datom Datom]))
@@ -26,72 +27,6 @@
   {:from 0x10000000
    :to   0x1FFFFFFF})
 
-(defn- find-identity-attrs [schema]
-  (set (keep (fn [[k v]]
-               (when (= :db.unique/identity (:db/unique v))
-                 k))
-             schema)))
-
-(defn- find-attr [schema target-k target-v]
-  (set (keep (fn [[k v]]
-               (when (= target-v (target-k v))
-                 k))
-             schema)))
-
-(defn find-attrs
-  "Find relevant attrs grouped by attribute type"
-  [schema]
-  {:identity? (find-attr schema :db/unique :db.unique/identity)
-   :ref? (find-attr schema :db/valueType :db.type/ref)
-   :many? (find-attr schema :db/cardinality :db.cardinality/many)
-   :component? (find-attr schema :db/isComponent true)})
-
-(defn- get-entity-ref [attrs entity]
-  (let [refs (select-keys entity (:identity? attrs))]
-    (case (bounded-count 2 refs)
-      0 (throw (ex-info "Entity without identity attribute"
-                        {:entity entity
-                         :attrs (:identity attrs)}))
-      1 (first refs)
-      2 (throw (ex-info (str "Entity with multiple identity attributes: " refs)
-                        {:entity entity
-                         :attrs (:identity attrs)})))))
-
-(defn- select-first-entry-of [map keyseq]
-  (loop [ret nil keys (seq keyseq)]
-    (when keys
-      (if-let [entry (. clojure.lang.RT (find map (first keys)))]
-        entry
-        (recur ret (next keys))))))
-
-(defn- get-entity-ref-unsafe [attrs entity-map]
-  (select-first-entry-of entity-map (:identity? attrs)))
-
-(defn- reverse-ref? [k]
-  (.startsWith (name k) "_"))
-
-(defn- reverse-ref-attr [k]
-  (if (reverse-ref? k)
-    (keyword (namespace k) (subs (name k) 1))
-    (keyword (namespace k) (str "_" (name k)))))
-
-(defn- find-all-entities [{:keys [ref? many? component?] :as attrs} entity-maps]
-  (persistent!
-   (reduce
-    (fn [res entity]
-      (reduce-kv
-       (fn [res k v]
-         (reduce conj! res
-                 (cond
-                   (ref? k) (find-all-entities attrs (if (many? k) v [v]))
-                   (reverse-ref? k) (let [reverse-k (reverse-ref-attr k)]
-                                      (find-all-entities attrs (if (component? reverse-k) [v] v)))
-                   :else [])))
-       res
-       entity))
-    (transient (into [] entity-maps))
-    entity-maps)))
-
 (defn- get-lowest-new-eid [{:keys [from to]} eavs]
   (inc (max
         (dec from)
@@ -104,7 +39,7 @@
              new-refs (transient refs)
              entities entities]
 
-        (if-let [rf (some->> (first entities) (get-entity-ref attrs))]
+        (if-let [rf (some->> (first entities) (ch/get-entity-ref attrs))]
           (if (new-refs rf)
             (recur idx new-refs (next entities))
             (do
@@ -117,9 +52,9 @@
 (defn- flatten-all-entities [source {:keys [ref? many? component?] :as attrs} refs all-entities]
   (let [disallow-nils (fn [k v entity]
                         (when (nil? v)
-                          (throw (ex-info "Attributes cannot be nil" {:entity (get-entity-ref attrs entity)
+                          (throw (ex-info "Attributes cannot be nil" {:entity (ch/get-entity-ref attrs entity)
                                                                       :key k}))))
-        get-eid #(refs (get-entity-ref-unsafe attrs %))]
+        get-eid #(refs (ch/get-entity-ref-unsafe attrs %))]
     (->> all-entities
          (reduce
           (fn [acc entity]
@@ -134,8 +69,8 @@
                            acc
                            (if (many? k) v [v]))
 
-                   (reverse-ref? k)
-                   (let [reverse-k (reverse-ref-attr k)]
+                   (ch/reverse-ref? k)
+                   (let [reverse-k (ch/reverse-ref-attr k)]
                      (reduce (fn [acc ref-entity-map]
                                (conj! acc (d/datom (get-eid ref-entity-map) reverse-k eid source)))
                              acc
@@ -173,7 +108,7 @@
      eavs))))
 
 (defn- explode-entity-maps [source {:keys [schema attrs] :as db} entity-maps]
-  (let [all-entities (find-all-entities attrs entity-maps)
+  (let [all-entities (ch/find-all-entities attrs entity-maps)
         new-refs (create-refs-lookup db all-entities)
         datoms (flatten-all-entities source attrs new-refs all-entities)]
     {:refs new-refs
@@ -238,7 +173,7 @@
                                  (update :to-add into new)
                                  (assoc :refs refs)
                                  (assoc :eavs eavs))))
-                         (assoc db :to-remove [] :to-add [] :attrs (find-attrs (:schema db)))
+                         (assoc db :to-remove [] :to-add [] :attrs (ch/find-attrs (:schema db)))
                          source->entity-maps)
         _ (disallow-conflicting-sources db-after)]
     {:tx-data (create-tx-data db-after)
@@ -279,7 +214,7 @@
 (defn explode
   "Given a schema and a list of entity-maps, you get a map of datoms (with generated entity ids) and a map of lookup-refs->eid back"
   [schema entity-maps]
-  (let [{:keys [many? ref?] :as attrs} (find-attrs schema)
+  (let [{:keys [many? ref?] :as attrs} (ch/find-attrs schema)
         {:keys [refs datoms] :as res} (explode-entity-maps ::ignore
                                                            {:schema schema
                                                             :attrs attrs

@@ -1,6 +1,7 @@
-(ns ^:focus datoms-differ.core2-test
+(ns datoms-differ.core2-test
   (:require [datoms-differ.core2 :as sut]
             [datoms-differ.datom :as d]
+            [datoms-differ.impl.core-helpers :as ch]
             [clojure.test :refer [deftest is testing]]
             [me.tonsky.persistent-sorted-set :as set]
             [clojure.string :as str]))
@@ -19,7 +20,7 @@
    :vessel/imo {:db/unique :db.unique/identity}
    :vessel/name {}})
 
-(def attrs (sut/find-attrs schema))
+(def attrs (ch/find-attrs schema))
 
 (deftest create-conn
   (is (= @(sut/create-conn schema)
