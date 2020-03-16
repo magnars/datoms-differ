@@ -256,7 +256,22 @@
           :eavs-added #{(d/datom 1025 :route/number "700" :prepare-routes)
                         (d/datom 1025 :route/name "Døvær" :prepare-routes)}
           :refs-added {[:route/number "700"] 1025
-                       [:route/number "800"] 1024}})))))
+                       [:route/number "800"] 1024}})))
+
+    (testing "Modify value to conflict for optimized check throws"
+      (let [entities (concat [{:vessel/imo "123" :vessel/name "Fyken"}]
+                             (for [i (range 100)]
+                               {:vessel/imo (str i) :vessel/name (str i)}))]
+        (try (-> (sut/with (db) :source entities)
+                 :db-after
+                 (sut/with :source (concat entities [{:vessel/imo "123" :vessel/name "Syken"}])))
+             (is (= :should-throw :didnt))
+               (catch Exception e
+                 (is (= "Conflicting values asserted for entity" (.getMessage e)))
+                 (is (= {:attr :vessel/name
+                         :entity-ref [:vessel/imo "123"]
+                         :conflict {:source #{"Fyken" "Syken"}}}
+                        (ex-data e)))))))))
 
 (deftest with-sources
   (testing "EMPTY DB, MULTIPLE SOURCES"
@@ -280,20 +295,6 @@
                 (d/datom 1024 :vessel/imo "123" :prepare-services)}
         :refs {[:vessel/imo "123"] 1024
                [:service/id :s123] 1025}}))
-
-    (testing "empty db conflicting sources throws"
-      (try (sut/with-sources
-             (db)
-             {:prepare-vessel [{:vessel/imo "123" :vessel/name "Fyken"}]
-              :prepare-vessel-2 [{:vessel/imo "123" :vessel/name "Syken"}]})
-           (is (= :should-throw :didnt))
-           (catch Exception e
-             (is (= "Conflicting values asserted for entity" (.getMessage e)))
-             (is (= {:attr :vessel/name
-                     :entity-ref [:vessel/imo "123"]
-                     :conflict {:prepare-vessel #{"Fyken"}
-                                :prepare-vessel-2 #{"Syken"}}}
-                    (ex-data e))))))
 
     (testing "empty db conflicting sources throws"
       (try (sut/with-sources
