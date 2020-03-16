@@ -1,5 +1,5 @@
-(ns datoms-differ.core2-test
-  (:require [datoms-differ.core2 :as sut]
+(ns datoms-differ.api-test
+  (:require [datoms-differ.api :as sut]
             [datoms-differ.datom :as d]
             [datoms-differ.impl.core-helpers :as ch]
             [clojure.test :refer [deftest is testing]]

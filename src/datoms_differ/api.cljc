@@ -1,4 +1,4 @@
-(ns datoms-differ.core2
+(ns datoms-differ.api
   (:require [datoms-differ.datom :as d]
             [datoms-differ.export :as dd-export]
             [datoms-differ.impl.core-helpers :as ch]
@@ -270,8 +270,6 @@
 (defn export-db
   "Export database to DataScript. Gives you a string that can be read by clojurescript (when datascript is loaded) to create a datascript db."
   [{:keys [schema] :as db}]
-  (println {:start-tx (inc (:to default-db-id-partition))
-            :partition-key ::db-id-partition})
   (dd-export/export (dd-export/prep-for-datascript schema)
                     (get-datoms db)
                     :start-tx (inc (:to default-db-id-partition))

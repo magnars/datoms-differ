@@ -1,11 +1,13 @@
 (ns perf
   (:require [criterium.core :as crit]
-            [datoms-differ.core2 :as c2]
+            [datoms-differ.api :as c2]
             [datoms-differ.core :as c]
             [datoms-differ.datom :as d]
             [medley.core :ref [map-vals]]
+            [me.tonsky.persistent-sorted-set.arrays :as arrays]
             [me.tonsky.persistent-sorted-set :as set]
-            [taoensso.tufte :as tufte]))
+            [taoensso.tufte :as tufte])
+  (:import [datoms_differ.datom Datom]))
 
 (comment
   (def history-schema
@@ -55,27 +57,26 @@
    {:format-pstats-opts {:columns [:n-calls :p50 :p90 :mean :clock :total]
                          :format-id-fn name}})
 
-  (tufte/profile {}
-                 (dotimes [i 50]
-                   (tufte/p :transact (transact-for-lots-off-add-and-remove))))
+  (tufte/profile {} (dotimes [i 50]
+                      (tufte/p :transact (transact-for-existing))))
 
 
-  (dotimes [x 200]
-    (let [sample-db (c2/create-conn history-schema)]
-      (println "\n********  NEW CLEAN DB  *********")
-      (time (c2/transact-sources! sample-db history-entities))
-      (println "\n********  NEW UPDATE  ***********")
-      (time (c2/transact-sources! sample-db history-entities))
-      (println "\n********  NEW TINY UPDATE  ***********")
-      (time (c2/transact-sources! sample-db modified-moves))
-      (count (:eavs @sample-db)))
-    )
+  (let [sample-db (c2/create-conn history-schema)]
+    (println "\n********  NEW CLEAN DB  *********")
+    (time (c2/transact-sources! sample-db history-entities))
+    (println "\n********  NEW UPDATE  ***********")
+    (time (c2/transact-sources! sample-db history-entities))
+    (println "\n********  NEW TINY UPDATE  ***********")
+    (time (c2/transact-sources! sample-db modified-moves))
+    (count (:eavs @sample-db)))
 
   (let [sample-db (c/create-conn history-schema)]
     (println "\n********  OLD CLEAN DB  ********")
     (time (c/transact-sources! sample-db history-entities))
     (println "\n********  OLD UPDATE  ***********")
     (time (c/transact-sources! sample-db history-entities))
+    (println "\n********  NEW TINY UPDATE  ***********")
+    (time (c/transact-sources! sample-db modified-moves))
     nil)
 
 
@@ -154,5 +155,34 @@
      (d/datom 536870912 :vessel/imo "1234" :prepare-vessels)])
 
   (d/to-eavs sample-datoms)
+
+
+  ;; TODO: Test custom compare using protocol
+  (defn compare-map [x y]
+    (if (map? y)
+      (compare (hash x) (hash y))
+      (throw (Exception. (str "Cannot compare " x " to " y)))))
+
+  (defn compare-set [x y]
+    (if (set? y)
+      (compare (hash x) (hash y))
+      (throw (Exception. (str "Cannot compare " x " to " y)))))
+
+  (extend-protocol d/DatomValueComparator
+    clojure.lang.PersistentArrayMap
+    (customCompareTo [x y] (compare-map x y))
+
+    clojure.lang.PersistentTreeMap
+    (customCompareTo [x y] (compare-map x y))
+
+    clojure.lang.PersistentHashMap
+    (customCompareTo [x y] (compare-map x y))
+
+    clojure.lang.PersistentHashSet
+    (customCompareTo [x y] (compare-set x y)))
+
+  (d/cmp-datoms-eav-only (d/datom 1 :vessel/imo {:dill/dall #{1}} :dummy)
+                         (d/datom 1 :vessel/imo {:dill/dall #{}} :dammy))
+
 
   )
