@@ -45,6 +45,11 @@
   @(sut/create-conn schema))
 
 (deftest with
+  (testing "source not keyword throws"
+    (is (thrown-with-msg? Exception
+                          #"Source must be a keyword"
+                          (sut/with (db) "prepare" []))))
+
   (testing "EMPTY DB, ONE SOURCE"
 
     (testing "empty db no entities returns same"
@@ -172,19 +177,17 @@
                [:vessel/imo "123"] 1024}}))
 
     (testing "empty db - nil val for attr throws"
-      (is (thrown? Exception
-                   (sut/with (db) :prepare-routes [{:route/number "100"
-                                                    :route/name nil}]))))
+      (is (thrown-with-msg? Exception #"Attributes cannot be nil"
+                            (sut/with (db) :prepare-routes [{:route/number "100"
+                                                             :route/name nil}]))))
 
     (testing "Running out of eids for db-id-partition throws"
       (let [db (sut/create-conn (assoc schema ::sut/db-id-partition {:from 1 :to 2}))]
-        (try
-          (sut/with @db :prep [{:vessel/imo "123"}
-                               {:vessel/imo "234"}
-                               {:vessel/imo "345"}])
-          (is (= :should-throw :didnt))
-          (catch Exception e
-            (is (str/starts-with? (.getMessage e) "Generated internal eid falls outside internal db-id-partition,"))))))
+        (is
+         (thrown-with-msg? Exception #"Generated internal eid falls outside internal db-id-partition,"
+                           (sut/with @db :prep [{:vessel/imo "123"}
+                                                {:vessel/imo "234"}
+                                                {:vessel/imo "345"}])))))
 
     (testing "empty db - entity without identity attributes throws"
       (is (thrown? Exception
@@ -253,10 +256,20 @@
                     [:db/retract 1024 :route/number "800"]
                     [:db/add 1025 :route/name "Døvær"]
                     [:db/add 1025 :route/number "700"]]
-          :eavs-added #{(d/datom 1025 :route/number "700" :prepare-routes)
-                        (d/datom 1025 :route/name "Døvær" :prepare-routes)}
-          :refs-added {[:route/number "700"] 1025
-                       [:route/number "800"] 1024}})))
+          :eavs #{(d/datom 1025 :route/number "700" :prepare-routes)
+                  (d/datom 1025 :route/name "Døvær" :prepare-routes)}
+          :refs {[:route/number "700"] 1025}})))
+
+    (testing "Remove one entity of many uses optimized path for ref pruning"
+      (let [routes (for [i (range 1 8)] {:route/number (str i)})
+            {:keys [db-after]} (sut/with (db) :prepare-routes (concat
+                                                               [{:route/number "800"}]
+                                                               routes))]
+        (assert-report
+         (sut/with db-after :prepare-routes routes)
+
+         {:tx-data [[:db/retract 1024 :route/number "800"]]
+          :refs (-> db-after :refs (dissoc [:route/number "800"]))})))
 
     (testing "Modify value to conflict for optimized check throws"
       (let [entities (concat [{:vessel/imo "123" :vessel/name "Fyken"}]
@@ -274,6 +287,12 @@
                         (ex-data e)))))))))
 
 (deftest with-sources
+  (testing "source not keyword throws"
+    (is (thrown-with-msg? Exception
+                          #"Source must be a keyword"
+                          (sut/with-sources (db) {:source []
+                                                  "source-2" []}))))
+
   (testing "EMPTY DB, MULTIPLE SOURCES"
     (testing "empty db two sources "
       (assert-report

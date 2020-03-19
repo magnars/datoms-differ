@@ -98,6 +98,13 @@
          persistent!
          d/to-eavs)))
 
+(defn- explode-entity-maps [source {:keys [schema attrs] :as db} entity-maps]
+  (let [all-entities (ch/find-all-entities attrs entity-maps)
+        [new-refs all-entities-with-eid] (create-refs-lookup db all-entities)
+        datoms (flatten-all-entities source attrs new-refs all-entities-with-eid)]
+    {:refs new-refs
+     :datoms datoms}))
+
 (defn- find-conflicting-value [many? eavs]
   (:conflict
    (persistent!
@@ -130,14 +137,8 @@
    nil
    to-add))
 
-(defn- explode-entity-maps [source {:keys [schema attrs] :as db} entity-maps]
-  (let [all-entities (ch/find-all-entities attrs entity-maps)
-        [new-refs all-entities-with-eid] (create-refs-lookup db all-entities)
-        datoms (flatten-all-entities source attrs new-refs all-entities-with-eid)]
-    {:refs new-refs
-     :datoms datoms}))
-
-(defn- disallow-conflicting-sources [{:keys [attrs eavs refs]} [e a]]
+(defn- throw-conflicting-values
+  [{:keys [attrs eavs refs]} [e a]]
   (let [{:keys [ref?]} attrs
         e->entity-ref (clojure.set/map-invert refs)
         datoms (set/slice eavs (d/datom e a nil nil) (d/datom e a nil nil))
@@ -150,31 +151,72 @@
                               (group-by :s)
                               (map-vals #(->> % (map v-fn) set)))}))))
 
-(defn- calc-source-report [eavs source datoms]
+(defn- disallow-conflicts
+  "Checks for conflicting values for all [e a]'s in db. Both across sources and for any given source.
+   If a conflict is found it throws with info about source(s) and which values are conflicting."
+  [{:keys [added eavs attrs] :as db}]
+  (let [{:keys [many?]} attrs]
+    ;; When there are few additions compared to total number of additions it's faster to just check the addition datoms
+    (some->> (if (> (/ 5 100) (/ (count added) (max (count eavs) 1)))
+               (find-conflicting-value-by-additions many? eavs added)
+               (find-conflicting-value many? eavs))
+             (throw-conflicting-values db))))
+
+(defn- find-source-diffs [source eavs datoms]
+  (diff-sorted (filter (partial d/source-equals? source) eavs)
+               datoms
+               d/cmp-datoms-eav-only))
+
+(defn- update-eavs-by-diff
+  "Fast path for updating the eavs index based on the results from a diff"
+  [eavs [retracted added]]
   (let [transient-union (fn [s1 v2]
                           (if (< (count s1) (count v2))
                             (persistent! (reduce conj! (transient (d/to-eavs v2)) s1))
-                            (persistent! (reduce conj! s1 v2))))
-        [old new] (diff-sorted (filter (partial d/source-equals? source) eavs)
-                               datoms
-                               d/cmp-datoms-eav-only)]
-    [old new
-     (loop [eavs-t (transient eavs)
-            to-remove old
-            to-add new]
-       (let [r (first to-remove)
-             a (first to-add)]
-         (cond
-           (and r a) (recur (-> eavs-t (disj! r) (conj! a)) (next to-remove) (next to-add))
-           (and (nil? r) a) (transient-union eavs-t to-add)
-           (and r (nil? a)) (persistent! (reduce disj! eavs-t to-remove))
-           :else (persistent! eavs-t))))]))
+                            (persistent! (reduce conj! s1 v2))))]
+    (loop [eavs-t (transient eavs)
+           retracted retracted
+           added added]
+      (let [r (first retracted)
+            a (first added)]
+        (cond
+          (and r a) (recur (-> eavs-t (disj! r) (conj! a)) (next retracted) (next added))
+          (and (nil? r) a) (transient-union eavs-t added)
+          (and r (nil? a)) (persistent! (reduce disj! eavs-t retracted))
+          :else (persistent! eavs-t))))))
+
+(defn- prune-refs
+  "Remove refs that are no longer present in eavs."
+  [{:keys [attrs retracted eavs refs]}]
+  (let [{:keys [identity?]} attrs]
+    (cond
+      (= 0 (count retracted))
+      refs
+
+      (> (/ 1 6) (/ (count retracted) (max (count eavs) 1)))
+      (persistent!
+       (reduce (fn [acc [e a v]]
+                 (if (and (identity? a)
+                          (not (set/slice eavs (d/datom e a nil nil) (d/datom e a nil nil))))
+                   (dissoc! acc [a v])
+                   acc))
+               (transient refs)
+               retracted))
+
+      :else
+      (persistent!
+       (reduce (fn [acc ^Datom d]
+                 (if (identity? (.-a d))
+                   (assoc! acc [(.-a d) (.-v d)] (.-e d))
+                   acc))
+               (transient {})
+               eavs)))))
 
 (defn- create-tx-data
   "Creates datomic transaction data from sorted sequences of add and removed calculated for each source
-   Do to potential presence of same datom present in multiple sources
-   , some additional filtering of is needed prior to generating the final tx report data"
-  [{:keys [to-remove to-add eavs]}]
+   Due to potential presence of same datom present in multiple sources,
+   some additional filtering is needed prior to generating the final tx report data"
+  [{:keys [retracted added eavs]}]
   (concat
    (persistent!
     (reduce (fn [acc ^Datom d]
@@ -182,32 +224,30 @@
                 acc
                 (conj! acc [:db/retract (.-e d) (.-a d) (.-v d)])))
             (transient [])
-            to-remove))
-   (for [^Datom d (d/to-eav-only to-add)]
+            retracted))
+   (for [^Datom d (d/to-eav-only added)]
      [:db/add (.-e d) (.-a d) (.-v d)])))
 
 (defn with-sources [db source->entity-maps]
   (let [{:keys [many?] :as attrs} (ch/find-attrs (:schema db))
-        db-after (reduce (fn [db [source entity-maps]]
-                           (let [{:keys [datoms refs]} (explode-entity-maps source db entity-maps)
-                                 [old new eavs] (calc-source-report (:eavs db) source datoms)]
-                             (-> db
-                                 (update :to-remove into old)
-                                 (update :to-add into new)
-                                 (assoc :refs refs)
-                                 (assoc :eavs eavs))))
-                         (assoc db :to-remove [] :to-add [] :attrs attrs)
-                         source->entity-maps)
-
-        ;; When there are few additions compared to total number of additions it's faster to just check the addition datoms
-        {:keys [refs eavs to-add]} db-after
-        _ (some->> (if (> (/ 5 100) (/ (count to-add) (max (count eavs) 1)))
-                     (find-conflicting-value-by-additions many? eavs to-add)
-                     (find-conflicting-value many? eavs))
-                   (disallow-conflicting-sources db-after))]
+        update-refs #(assoc % :refs (prune-refs %))
+        db-after (->> source->entity-maps
+                      (reduce (fn [db [source entity-maps]]
+                                (when-not (keyword? source)
+                                  (throw (ex-info "Source must be a keyword." {:source source})))
+                                (let [{:keys [datoms refs]} (explode-entity-maps source db entity-maps)
+                                      [retracted added] (find-source-diffs source (:eavs db) datoms)]
+                                  (-> db
+                                      (update :retracted into retracted)
+                                      (update :added into added)
+                                      (assoc :refs refs)
+                                      (update :eavs update-eavs-by-diff [retracted added]))))
+                              (assoc db :retracted [] :added [] :attrs attrs))
+                      update-refs)
+        _ (disallow-conflicts db-after)]
     {:tx-data (create-tx-data db-after)
      :db-before db
-     :db-after (dissoc db-after :attrs :to-add :to-remove)}))
+     :db-after (dissoc db-after :attrs :added :retracted)}))
 
 (defn with [db source entity-maps]
   (with-sources db {source entity-maps}))
@@ -249,14 +289,15 @@
                                                             :eavs (d/empty-eavs)
                                                             :refs {}}
                                                            entity-maps)]
+
     (when-let [[e a] (find-conflicting-value many? datoms)]
       (let [e->entity-ref (clojure.set/map-invert refs)
-            conflicting-datoms (set/slice datoms (d/datom e a nil nil) (d/datom e a nil nil))
-            v-fn (if (ref? a) (comp e->entity-ref :v) :v)]
-        (throw (ex-info "Conflicting values asserted for entity"
-                        {:entity-ref (e->entity-ref e)
-                         :attr a
-                         :conflicting-values (into #{} (map v-fn conflicting-datoms))}))))
+              conflicting-datoms (set/slice datoms (d/datom e a nil nil) (d/datom e a nil nil))
+              v-fn (if (ref? a) (comp e->entity-ref :v) :v)]
+          (throw (ex-info "Conflicting values asserted for entity"
+                          {:entity-ref (e->entity-ref e)
+                           :attr a
+                           :conflicting-values (into #{} (map v-fn conflicting-datoms))}))))
 
     (update res :datoms #(map (fn [[e a v]] [e a v]) %))))
 
