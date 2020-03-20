@@ -151,7 +151,7 @@
                               (group-by :s)
                               (map-vals #(->> % (map v-fn) set)))}))))
 
-(defn- disallow-conflicts
+(defn- disallow-conflicting-values
   "Checks for conflicting values for all [e a]'s in db. Both across sources and for any given source.
    If a conflict is found it throws with info about source(s) and which values are conflicting."
   [{:keys [added eavs attrs] :as db}]
@@ -245,7 +245,7 @@
                                       (update :eavs update-eavs-by-diff [retracted added]))))
                               (assoc db :retracted [] :added [] :attrs attrs))
                       update-refs)
-        _ (disallow-conflicts db-after)]
+        _ (disallow-conflicting-values db-after)]
     {:tx-data (create-tx-data db-after)
      :db-before db
      :db-after (dissoc db-after :attrs :added :retracted)}))
