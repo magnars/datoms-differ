@@ -1,55 +1,10 @@
 (ns datoms-differ.core
-  (:require [clojure.set :as set]))
+  (:require [clojure.set :as set]
+            [datoms-differ.impl.core-helpers :as ch]))
 
 (def default-db-id-partition
   {:from 0x10000000
    :to   0x1FFFFFFF})
-
-(defn find-identity-attrs [schema]
-  (set (keep (fn [[k v]]
-               (when (= :db.unique/identity (:db/unique v))
-                 k))
-             schema)))
-
-(defn find-attr [schema target-k target-v]
-  (set (keep (fn [[k v]]
-               (when (= target-v (target-k v))
-                 k))
-             schema)))
-
-(defn find-attrs [schema]
-  {:identity? (find-attr schema :db/unique :db.unique/identity)
-   :ref? (find-attr schema :db/valueType :db.type/ref)
-   :many? (find-attr schema :db/cardinality :db.cardinality/many)
-   :component? (find-attr schema :db/isComponent true)})
-
-(defn get-entity-ref [attrs entity]
-  (let [refs (select-keys entity (conj (:identity? attrs) :db/id))]
-    (case (bounded-count 2 refs)
-      0 (throw (ex-info "Entity without identity attribute"
-                        {:entity entity
-                         :attrs (:identity attrs)}))
-      1 (first refs)
-      2 (throw (ex-info (str "Entity with multiple identity attributes: " refs)
-                        {:entity entity
-                         :attrs (:identity attrs)})))))
-
-(defn reverse-ref? [k]
-  (= \_ (first (name k))))
-
-(defn reverse-ref-attr [k]
-  (if (reverse-ref? k)
-    (keyword (namespace k) (subs (name k) 1))
-    (keyword (namespace k) (str "_" (name k)))))
-
-(defn find-all-entities [{:keys [ref? many? component?] :as attrs} entity-maps]
-  (->> (mapcat seq entity-maps)
-       (mapcat (fn [[k v]]
-                 (cond
-                   (ref? k) (find-all-entities attrs (if (many? k) v [v]))
-                   (reverse-ref? k) (let [reverse-k (reverse-ref-attr k)]
-                                      (find-all-entities attrs (if (component? reverse-k) [v] v))))))
-       (into entity-maps)))
 
 (defn create-refs-lookup [{:keys [from to]} old-refs all-refs]
   (let [lowest-new-eid (inc (apply max
@@ -70,10 +25,10 @@
          (into old-refs))))
 
 (defn flatten-entity-map [{:keys [ref? many? component?] :as attrs} refs entity]
-  (let [eid (refs (get-entity-ref attrs entity))
+  (let [eid (refs (ch/get-entity-ref attrs entity))
         disallow-nils (fn [k v]
                         (when (nil? v)
-                          (throw (ex-info "Attributes cannot be nil" {:entity (get-entity-ref attrs entity)
+                          (throw (ex-info "Attributes cannot be nil" {:entity (ch/get-entity-ref attrs entity)
                                                                       :key k}))))]
     (mapcat (fn [[k v]]
               (cond
@@ -87,12 +42,12 @@
                      (disallow-nils k v)
                      [eid k (if (number? v)
                               v
-                              (refs (get-entity-ref attrs v)))])))
+                              (refs (ch/get-entity-ref attrs v)))])))
 
-                (reverse-ref? k)
-                (let [reverse-k (reverse-ref-attr k)]
+                (ch/reverse-ref? k)
+                (let [reverse-k (ch/reverse-ref-attr k)]
                   (for [ref-entity-map (if (component? reverse-k) [v] v)]
-                    [(refs (get-entity-ref attrs ref-entity-map)) reverse-k eid]))
+                    [(refs (ch/get-entity-ref attrs ref-entity-map)) reverse-k eid]))
 
                 :else-scalar
                 (doall
@@ -122,9 +77,9 @@
         (throw (ex-info (str "No attributes asserted for entity: " (pr-str e)) {}))))))
 
 (defn explode [{:keys [schema refs]} entity-maps]
-  (let [attrs (find-attrs schema)
-        all-entities (find-all-entities attrs entity-maps)
-        entity-refs (distinct (map #(get-entity-ref attrs %) all-entities))
+  (let [attrs (ch/find-attrs schema)
+        all-entities (ch/find-all-entities attrs entity-maps)
+        entity-refs (distinct (map #(ch/get-entity-ref attrs %) all-entities))
         new-refs (create-refs-lookup (::db-id-partition schema default-db-id-partition) refs entity-refs)
         datoms (set (mapcat #(flatten-entity-map attrs new-refs %) all-entities))]
     (disallow-conflicting-values new-refs attrs datoms)
@@ -151,7 +106,7 @@
   (apply set/union #{} (vals (:source-datoms db))))
 
 (defn disallow-conflicting-sources [db]
-  (let [{:keys [many? ref?]} (find-attrs (:schema db))]
+  (let [{:keys [many? ref?]} (ch/find-attrs (:schema db))]
     (doseq [[[e a] datoms] (->> (:source-datoms db)
                                 (mapcat (fn [[source datoms]]
                                           (keep (fn [[e a v]]

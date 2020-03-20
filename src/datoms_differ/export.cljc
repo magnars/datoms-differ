@@ -1,13 +1,16 @@
 (ns datoms-differ.export
-  (:require [datoms-differ.core :refer [get-datoms find-attrs]]
+  (:require [datoms-differ.core :refer [get-datoms]]
+            [datoms-differ.impl.core-helpers :as ch]
             [medley.core :refer [filter-keys map-vals]]))
 
 (def tx0 (inc (:to datoms-differ.core/default-db-id-partition)))
 
-(defn export [schema datoms]
+(defn export [schema datoms & {:keys [partition-key start-tx]
+                               :or {partition-key :datoms-differ.core/db-id-partition
+                                    start-tx tx0}}]
   (str "#datascript/DB "
-       (pr-str {:schema (dissoc schema :datoms-differ.core/db-id-partition)
-                :datoms (into [] (map #(conj % tx0)) datoms)})))
+       (pr-str {:schema (dissoc schema partition-key)
+                :datoms (into [] (map #(conj % start-tx)) datoms)})))
 
 
 (defn prep-for-datascript
@@ -19,7 +22,7 @@
   (export (prep-for-datascript (:schema db)) (get-datoms db)))
 
 (defn prune-diffs [schema tx-data]
-  (let [{:keys [many?]} (find-attrs schema)
+  (let [{:keys [many?]} (ch/find-attrs schema)
         overwriting-additions (set (keep (fn [[op eid attr]]
                                            (when (and (= :db/add op)
                                                       (not (many? attr)))
@@ -29,3 +32,4 @@
               (and (= :db/retract op)
                    (overwriting-additions [eid attr])))
             tx-data)))
+

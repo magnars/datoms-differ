@@ -2,10 +2,10 @@
   (:require [clansi]
             [clojure.set :as set]
             [clojure.string :as str]
-            [datoms-differ.core :as core]))
+            [datoms-differ.impl.core-helpers :as ch]))
 
 (defn replace-entity-ids-with-identifier [schema datoms]
-  (let [{:keys [ref? identity?]} (core/find-attrs schema)
+  (let [{:keys [ref? identity?]} (ch/find-attrs schema)
         reverse-id-lookup (into {} (keep (fn [[e a v]]
                                            (when (identity? a)
                                              [e [a v]])) datoms))]
