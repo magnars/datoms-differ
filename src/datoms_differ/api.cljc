@@ -167,23 +167,24 @@
                datoms
                d/cmp-datoms-eav-only))
 
+(defn- union! [s1 v2]
+  (if (< (count s1) (count v2))
+    (reduce conj! (transient (d/to-eavs v2)) s1)
+    (reduce conj! s1 v2)))
+
 (defn- update-eavs-by-diff
   "Fast path for updating the eavs index based on the results from a diff"
   [eavs [retracted added]]
-  (let [transient-union (fn [s1 v2]
-                          (if (< (count s1) (count v2))
-                            (persistent! (reduce conj! (transient (d/to-eavs v2)) s1))
-                            (persistent! (reduce conj! s1 v2))))]
-    (loop [eavs-t (transient eavs)
-           retracted retracted
-           added added]
-      (let [r (first retracted)
-            a (first added)]
-        (cond
-          (and r a) (recur (-> eavs-t (disj! r) (conj! a)) (next retracted) (next added))
-          (and (nil? r) a) (transient-union eavs-t added)
-          (and r (nil? a)) (persistent! (reduce disj! eavs-t retracted))
-          :else (persistent! eavs-t))))))
+  (loop [eavs-t (transient eavs)
+         retracted retracted
+         added added]
+    (let [r (first retracted)
+          a (first added)]
+      (cond
+        (and r a) (recur (-> eavs-t (disj! r) (conj! a)) (next retracted) (next added))
+        (and (nil? r) a) (persistent! (union! eavs-t added))
+        (and r (nil? a)) (persistent! (reduce disj! eavs-t retracted))
+        :else (persistent! eavs-t)))))
 
 (defn- prune-refs
   "Remove refs that are no longer present in eavs."
