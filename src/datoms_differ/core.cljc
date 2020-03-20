@@ -1,4 +1,6 @@
 (ns datoms-differ.core
+  "Deprecation warning: This namespace is here for backwards compatibility. You
+  probably want to use datoms-differ.api instead."
   (:require [clojure.set :as set]
             [datoms-differ.impl.core-helpers :as ch]))
 
