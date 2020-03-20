@@ -35,30 +35,30 @@
 (defn- create-refs-lookup [{:keys [schema attrs eavs refs]} entities]
   (let [{:keys [from to] :as db-id-partition} (::db-id-partition schema default-db-id-partition)
         lowest-new-eid (get-lowest-new-eid db-id-partition eavs)]
-      (loop [idx lowest-new-eid
-             new-refs (transient refs)
-             entities-with-eid (transient [])
-             entities entities]
-        (let [entity (first entities)
-              rf (when entity (ch/get-entity-ref attrs entity))
-              eid (when rf (new-refs rf))]
-          (cond
-            (nil? entity) [(persistent! new-refs) (persistent! entities-with-eid)]
+    (loop [idx lowest-new-eid
+           new-refs (transient refs)
+           entities-with-eid (transient [])
+           entities entities]
+      (let [entity (first entities)
+            rf (when entity (ch/get-entity-ref attrs entity))
+            eid (when rf (new-refs rf))]
+        (cond
+          (nil? entity) [(persistent! new-refs) (persistent! entities-with-eid)]
 
-            eid (recur idx
-                       new-refs
-                       (conj! entities-with-eid [entity eid])
-                       (next entities))
+          eid (recur idx
+                     new-refs
+                     (conj! entities-with-eid [entity eid])
+                     (next entities))
 
-            :else
-            (do
-              (when-not (<= from idx to)
-                (throw (ex-info "Generated internal eid falls outside internal db-id-partition, check :datoms-differ.core2/db-id-partition"
-                                {:ref rf :eid idx :internal-partition {:from from :to to}})))
-              (recur (inc idx)
-                     (assoc! new-refs rf idx)
-                     (conj! entities-with-eid [entity idx])
-                     (next entities))))))))
+          :else
+          (do
+            (when-not (<= from idx to)
+              (throw (ex-info "Generated internal eid falls outside internal db-id-partition, check :datoms-differ.core2/db-id-partition"
+                              {:ref rf :eid idx :internal-partition {:from from :to to}})))
+            (recur (inc idx)
+                   (assoc! new-refs rf idx)
+                   (conj! entities-with-eid [entity idx])
+                   (next entities))))))))
 
 (defn- flatten-all-entities [source {:keys [ref? many? component?] :as attrs} refs all-entities]
   (let [disallow-nils (fn [k v entity]
@@ -292,12 +292,12 @@
 
     (when-let [[e a] (find-conflicting-value many? datoms)]
       (let [e->entity-ref (clojure.set/map-invert refs)
-              conflicting-datoms (set/slice datoms (d/datom e a nil nil) (d/datom e a nil nil))
-              v-fn (if (ref? a) (comp e->entity-ref :v) :v)]
-          (throw (ex-info "Conflicting values asserted for entity"
-                          {:entity-ref (e->entity-ref e)
-                           :attr a
-                           :conflicting-values (into #{} (map v-fn conflicting-datoms))}))))
+            conflicting-datoms (set/slice datoms (d/datom e a nil nil) (d/datom e a nil nil))
+            v-fn (if (ref? a) (comp e->entity-ref :v) :v)]
+        (throw (ex-info "Conflicting values asserted for entity"
+                        {:entity-ref (e->entity-ref e)
+                         :attr a
+                         :conflicting-values (into #{} (map v-fn conflicting-datoms))}))))
 
     (update res :datoms #(map (fn [[e a v]] [e a v]) %))))
 

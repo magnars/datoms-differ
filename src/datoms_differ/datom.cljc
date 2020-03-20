@@ -61,10 +61,10 @@
 
 (defn- val-at-datom [^Datom d k not-found]
   (case k
-    :e      (.-e d)
-    :a      (.-a d)
-    :v      (.-v d)
-    :s      (.-s d)
+    :e (.-e d)
+    :a (.-a d)
+    :v (.-v d)
+    :s (.-s d)
     not-found))
 
 (defn- nth-datom
@@ -86,10 +86,10 @@
 
 (defn- ^Datom assoc-datom [^Datom d k v]
   (case k
-    :e     (datom v       (.-a d) (.-v d) (.-s d) )
-    :a     (datom (.-e d) v       (.-v d) (.-s d) )
-    :v     (datom (.-e d) (.-a d) v       (.-s d) )
-    :s     (datom (.-e d) (.-a d) (.-v d) v            )
+    :e (datom v       (.-a d) (.-v d) (.-s d) )
+    :a (datom (.-e d) v       (.-v d) (.-s d) )
+    :v (datom (.-e d) (.-a d) v       (.-s d) )
+    :s (datom (.-e d) (.-a d) (.-v d) v            )
     (throw (IllegalArgumentException. (str "invalid key for Datom: " k)))))
 
 #?(:clj
