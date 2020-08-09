@@ -12,13 +12,39 @@
                  k))
              schema)))
 
+(defn- validate-attrs [{:keys [many? ref? tuple?]}]
+  (doseq [[k tupleAttrs] tuple?]
+    (doseq [tupleAttr tupleAttrs]
+      (when (many? tupleAttr)
+        (throw (ex-info "Tuple attribute can't reference cardinality many attribute"
+                        {:attr k
+                         :conflict #{tupleAttr}})))
+      (when (tuple? tupleAttr)
+        (throw (ex-info "Tuple attribute can't reference another tuple attribute"
+                        {:attr k
+                         :conflict #{tupleAttr}}))))))
+
 (defn find-attrs
   "Find relevant attrs grouped by attribute type"
   [schema]
-  {:identity? (find-attr schema :db/unique :db.unique/identity)
-   :ref? (find-attr schema :db/valueType :db.type/ref)
-   :many? (find-attr schema :db/cardinality :db.cardinality/many)
-   :component? (find-attr schema :db/isComponent true)})
+  (let [attrs {:identity? (find-attr schema :db/unique :db.unique/identity)
+               :ref? (find-attr schema :db/valueType :db.type/ref)
+               :many? (find-attr schema :db/cardinality :db.cardinality/many)
+               :component? (find-attr schema :db/isComponent true)
+               :tuple? (into {} (keep (fn [[k v]]
+                                        (when-let [tupleAttrs (:db/tupleAttrs v)]
+                                          [k tupleAttrs]))
+                                      schema))}]
+    (validate-attrs attrs)
+    attrs))
+
+(defn add-tuple-attributes [attrs entity]
+  (reduce-kv (fn [e k tupleAttrs]
+               (if (some entity tupleAttrs)
+                 (assoc e k (mapv #(get e %) tupleAttrs))
+                 e))
+          entity
+          (:tuple? attrs)))
 
 (defn get-entity-ref [attrs entity]
   (let [refs (select-keys entity (conj (:identity? attrs) :db/id))]
@@ -29,7 +55,7 @@
       1 (first refs)
       2 (throw (ex-info (str "Entity with multiple identity attributes: " refs)
                         {:entity entity
-                         :attrs (:identity attrs)})))))
+                         :attrs (:identity? attrs)})))))
 
 (defn- select-first-entry-of [map keyseq]
   (loop [ret nil keys (seq keyseq)]

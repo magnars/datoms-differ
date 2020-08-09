@@ -12,13 +12,22 @@
    :route/number {:db/unique :db.unique/identity}
    :route/services {:db/valueType :db.type/ref :db/cardinality :db.cardinality/many}
    :route/tags {:db/cardinality :db.cardinality/many}
+   :route/holidays {:db/valueType :db.type/ref :db/cardinality :db.cardinality/many}
    :service/trips {:db/valueType :db.type/ref :db/cardinality :db.cardinality/many :db/isComponent true}
    :trip/id {:db/unique :db.unique/identity}
    :service/id {:db/unique :db.unique/identity}
    :service/label {}
    :service/allocated-vessel {:db/valueType :db.type/ref :db/cardinality :db.cardinality/one}
    :vessel/imo {:db/unique :db.unique/identity}
-   :vessel/name {}})
+   :vessel/name {}
+   :holiday/bus-key {:db/unique :db.unique/identity
+                     :db/tupleAttrs [:holiday/pattern :holiday/weekday]}
+   :holiday/pattern {}
+   :holiday/weekday {}
+   :my-tuple/id {:db/unique :db.unique/identity}
+   :my-tuple/a {}
+   :my-tuple/b {}
+   :my-tuple/tup {:db/tupleAttrs [:my-tuple/a :my-tuple/b]}})
 
 (def attrs (ch/find-attrs schema))
 
@@ -83,6 +92,19 @@
                 (d/datom 1024 :route/tags :tag-2 :prepare-routes)}
         :refs {[:route/number "800"] 1024}}))
 
+    (testing "empty db entity with tuple attributes"
+      (assert-report
+       (sut/with (db) :prepare [{:holiday/pattern :christmas-day :holiday/weekday :monday}])
+
+       {:tx-data [[:db/add 1024 :holiday/bus-key [:christmas-day :monday]]
+                  [:db/add 1024 :holiday/pattern :christmas-day]
+                  [:db/add 1024 :holiday/weekday :monday]]
+
+        :eavs #{(d/datom 1024 :holiday/bus-key [:christmas-day :monday] :prepare)
+                (d/datom 1024 :holiday/pattern :christmas-day :prepare)
+                (d/datom 1024 :holiday/weekday :monday :prepare)}
+        :refs {[:holiday/bus-key [:christmas-day :monday]] 1024}}))
+
     (testing "empty db one entity with nested entities"
       (assert-report
        (sut/with (db)
@@ -103,6 +125,25 @@
                 (d/datom 1025 :service/label "service-label" :prepare-routes)}
         :refs {[:route/number "800"] 1024
                [:service/id :service-1] 1025}}))
+
+    (testing "empty db entity with nested entitites with tuple attributes"
+      (assert-report
+       (sut/with (db) :prepare [{:route/number "800"
+                                 :route/holidays [{:holiday/pattern :christmas-day :holiday/weekday :monday}]}])
+
+       {:tx-data [[:db/add 1024 :route/holidays 1025]
+                  [:db/add 1024 :route/number "800"]
+                  [:db/add 1025 :holiday/bus-key [:christmas-day :monday]]
+                  [:db/add 1025 :holiday/pattern :christmas-day]
+                  [:db/add 1025 :holiday/weekday :monday]]
+
+        :eavs #{(d/datom 1024 :route/holidays 1025 :prepare)
+                (d/datom 1024 :route/number "800" :prepare)
+                (d/datom 1025 :holiday/bus-key [:christmas-day :monday] :prepare)
+                (d/datom 1025 :holiday/pattern :christmas-day :prepare)
+                (d/datom 1025 :holiday/weekday :monday :prepare)}
+        :refs {[:route/number "800"] 1024
+               [:holiday/bus-key [:christmas-day :monday]] 1025}}))
 
     (testing "empty db - reverse entity-ref, isn't component"
       (assert-report
@@ -135,6 +176,26 @@
                 (d/datom 1025 :service/trips 1024 :prepare-routes)}
         :refs {[:trip/id "foo"] 1024
                [:service/id :s567] 1025}}))
+
+    (testing "empty db - reverse entity-ref - tuple style"
+      (assert-report
+       (sut/with (db) :prepare [{:holiday/pattern :christmas-day
+                                 :holiday/weekday :monday
+                                 :route/_holidays [{:route/number "800"}]}])
+
+       {:tx-data [[:db/add 1024 :holiday/bus-key [:christmas-day :monday]]
+                  [:db/add 1024 :holiday/pattern :christmas-day]
+                  [:db/add 1024 :holiday/weekday :monday]
+                  [:db/add 1025 :route/holidays 1024]
+                  [:db/add 1025 :route/number "800"]]
+
+        :eavs #{(d/datom 1024 :holiday/bus-key [:christmas-day :monday] :prepare)
+                (d/datom 1024 :holiday/pattern :christmas-day :prepare)
+                (d/datom 1024 :holiday/weekday :monday :prepare)
+                (d/datom 1025 :route/holidays 1024 :prepare)
+                (d/datom 1025 :route/number "800" :prepare)}
+        :refs {[:holiday/bus-key [:christmas-day :monday]] 1024
+               [:route/number "800"] 1025}}))
 
     (testing "empty-db - reverse refs multiple levels"
       (assert-report
@@ -205,7 +266,21 @@
           (is (= {:entity-ref [:route/number "100"]
                   :attr :route/name
                   :conflict {:prepare-routes #{"Stavanger-Taua" "Stavanger-Tau"}}}
-                 (ex-data e)))))))
+                 (ex-data e))))))
+
+    (testing "tuple unique identity conflicts on two entities with same tuple throws"
+      (try
+       (sut/with (db) :prepare [{:holiday/pattern :christmas-day :holiday/weekday :monday :holiday/extra :foo}
+                                {:holiday/pattern :christmas-day :holiday/weekday :monday :holiday/extra :bar}])
+
+       (is (= :should-throw :didnt))
+       (catch Exception e
+         (is (= "Conflicting values asserted for entity" (.getMessage e)))
+         (is (= {:entity-ref [:holiday/bus-key [:christmas-day :monday]]
+                 :attr :holiday/extra
+                 :conflict {:prepare #{:foo :bar}}}
+                (ex-data e))))
+       )))
 
   (testing "PREVIOUS DB, ONE SOURCE"
     (testing "Same entitie(s) gives no diff"
@@ -260,16 +335,47 @@
                   (d/datom 1025 :route/name "Døvær" :prepare-routes)}
           :refs {[:route/number "700"] 1025}})))
 
-    (testing "Remove one entity of many uses optimized path for ref pruning"
-      (let [routes (for [i (range 1 8)] {:route/number (str i)})
-            {:keys [db-after]} (sut/with (db) :prepare-routes (concat
-                                                               [{:route/number "800"}]
-                                                               routes))]
+    (testing "Added new entity and remove one gives add/remove txes, new datoms and new refs"
+      (let [{:keys [db-after]} (sut/with (db) :prepare-routes [{:route/number "800"
+                                                                :route/name "Røvær"}])]
         (assert-report
-         (sut/with db-after :prepare-routes routes)
+         (sut/with db-after :prepare-routes [{:route/number "700"
+                                              :route/name "Døvær"}])
 
-         {:tx-data [[:db/retract 1024 :route/number "800"]]
-          :refs (-> db-after :refs (dissoc [:route/number "800"]))})))
+         {:tx-data [[:db/retract 1024 :route/name "Røvær"]
+                    [:db/retract 1024 :route/number "800"]
+                    [:db/add 1025 :route/name "Døvær"]
+                    [:db/add 1025 :route/number "700"]]
+          :eavs #{(d/datom 1025 :route/number "700" :prepare-routes)
+                  (d/datom 1025 :route/name "Døvær" :prepare-routes)}
+          :refs {[:route/number "700"] 1025}})))
+
+    (testing "Remove all attributes in generated tuple also retracts tupleAttr"
+      (let [entities [{:my-tuple/id :one
+                       :my-tuple/a :a
+                       :my-tuple/b :b}]
+            {:keys [db-after]} (sut/with (db) :prepare entities)]
+        (assert-report
+         (sut/with db-after :prepare [{:my-tuple/id :one}])
+
+         {:tx-data [[:db/retract 1024 :my-tuple/a :a]
+                    [:db/retract 1024 :my-tuple/b :b]
+                    [:db/retract 1024 :my-tuple/tup [:a :b]]]
+          :refs {[:my-tuple/id :one] 1024}})))
+
+    (testing "Update of attributes used in tupleAttr also updates the tupleAttr "
+      (let [entities [{:my-tuple/id :one
+                       :my-tuple/a :a
+                       :my-tuple/b :b}]
+            {:keys [db-after]} (sut/with (db) :prepare entities)]
+        (assert-report
+         (sut/with db-after :prepare [{:my-tuple/id :one
+                                       :my-tuple/a :a}])
+
+         {:tx-data [[:db/retract 1024 :my-tuple/b :b]
+                    [:db/retract 1024 :my-tuple/tup [:a :b]]
+                    [:db/add 1024 :my-tuple/tup [:a nil]]]
+          :refs {[:my-tuple/id :one] 1024}})))
 
     (testing "Modify value to conflict for optimized check throws"
       (let [entities (concat [{:vessel/imo "123" :vessel/name "Fyken"}]
@@ -279,12 +385,12 @@
                  :db-after
                  (sut/with :source (concat entities [{:vessel/imo "123" :vessel/name "Syken"}])))
              (is (= :should-throw :didnt))
-               (catch Exception e
-                 (is (= "Conflicting values asserted for entity" (.getMessage e)))
-                 (is (= {:attr :vessel/name
-                         :entity-ref [:vessel/imo "123"]
-                         :conflict {:source #{"Fyken" "Syken"}}}
-                        (ex-data e)))))))))
+             (catch Exception e
+               (is (= "Conflicting values asserted for entity" (.getMessage e)))
+               (is (= {:attr :vessel/name
+                       :entity-ref [:vessel/imo "123"]
+                       :conflict {:source #{"Fyken" "Syken"}}}
+                      (ex-data e)))))))))
 
 (deftest with-sources
   (testing "source not keyword throws"
@@ -490,13 +596,20 @@
                   "{:route/tags #:db{:cardinality :db.cardinality/many},"
                   " :service/label {},"
                   " :route/name {},"
+                  " :holiday/bus-key #:db{:unique :db.unique/identity, :tupleAttrs [:holiday/pattern :holiday/weekday]},"
+                  " :my-tuple/id #:db{:unique :db.unique/identity},"
+                  " :holiday/weekday {},"
+                  " :route/holidays #:db{:valueType :db.type/ref, :cardinality :db.cardinality/many},"
                   " :trip/id #:db{:unique :db.unique/identity},"
                   " :vessel/imo #:db{:unique :db.unique/identity},"
                   " :service/trips #:db{:valueType :db.type/ref, :cardinality :db.cardinality/many, :isComponent true},"
                   " :vessel/name {},"
+                  " :my-tuple/a {}, :my-tuple/tup #:db{:tupleAttrs [:my-tuple/a :my-tuple/b]},"
+                  " :holiday/pattern {},"
                   " :route/services #:db{:valueType :db.type/ref, :cardinality :db.cardinality/many},"
                   " :service/allocated-vessel #:db{:valueType :db.type/ref, :cardinality :db.cardinality/one},"
                   " :route/number #:db{:unique :db.unique/identity},"
+                  " :my-tuple/b {},"
                   " :service/id #:db{:unique :db.unique/identity}}, "
                   ":datoms "
                   "[[1024 :vessel/imo \"123\" 536870912]"
