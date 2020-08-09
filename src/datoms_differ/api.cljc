@@ -75,14 +75,20 @@
                  (ref? k)
                  (reduce (fn [acc v]
                            (disallow-nils k v entity)
-                           (conj! acc (d/datom eid k (if (number? v) v (get-eid v)) source)))
+                           (conj! acc (d/datom eid
+                                               k
+                                               (if (number? v) v (get-eid (ch/add-tuple-attributes attrs v)))
+                                               source)))
                          acc
                          (if (many? k) v [v]))
 
                  (ch/reverse-ref? k)
                  (let [reverse-k (ch/reverse-ref-attr k)]
                    (reduce (fn [acc ref-entity-map]
-                             (conj! acc (d/datom (get-eid ref-entity-map) reverse-k eid source)))
+                             (conj! acc (d/datom (get-eid (ch/add-tuple-attributes attrs ref-entity-map))
+                                                 reverse-k
+                                                 eid
+                                                 source)))
                            acc
                            (if (component? reverse-k) [v] v)))
 
@@ -99,7 +105,9 @@
          d/to-eavs)))
 
 (defn- explode-entity-maps [source {:keys [schema attrs] :as db} entity-maps]
-  (let [all-entities (ch/find-all-entities attrs entity-maps)
+  (let [all-entities (->> entity-maps
+                          (ch/find-all-entities attrs)
+                          (map (partial ch/add-tuple-attributes attrs)))
         [new-refs all-entities-with-eid] (create-refs-lookup db all-entities)
         datoms (flatten-all-entities source attrs new-refs all-entities-with-eid)]
     {:refs new-refs
