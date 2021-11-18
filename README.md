@@ -9,9 +9,11 @@ data via a datomic/datascript-like API and data structure.
 
 *What's it for then?*
 
-One use case might be keeping clients in sync with a backend. The
+One use case is keeping clients in sync with a backend. The
 client is initialized with a datascript db when connecting, and is fed updates
 in the form of tx-data when the backend changes.
+
+Or you might just be looking to diff complex structures of data with a convenient RDF-style output.
 
 *So what does this do again?*
 
