@@ -1,6 +1,6 @@
 # datoms-differ
 
-Find the diff between two txes in datoms.
+Find the diff (as datoms) between two txes (of entity maps).
 
 *What the what?*
 
@@ -9,7 +9,7 @@ data via a datomic/datascript-like API and data structure.
 
 *What's it for then?*
 
-This is a tool to use when you want to keep clients in sync with a backend. The
+One use case might be keeping clients in sync with a backend. The
 client is initialized with a datascript db when connecting, and is fed updates
 in the form of tx-data when the backend changes.
 
