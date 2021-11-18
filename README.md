@@ -30,7 +30,7 @@ Add `[datoms-differ "2020-08-09"]` to `:dependencies` in your `project.clj`.
 
 ## API
 
-Require `[datoms-differ.core]`.
+Require `[datoms-differ.api]`.
 
 ### `(create-conn schema)`
 
@@ -127,7 +127,7 @@ Note that datoms-differ uses internal entity ids in the [0x10000000
 You can change the internal db-id-partition by specifying it as part of the schema:
 
 ```
-    (create-conn (assoc schema :datoms-differ.core/db-id-partition {:from 1024 :to 2048}))
+    (create-conn (assoc schema :datoms-differ.api/db-id-partition {:from 1024 :to 2048}))
 ```
 
 These numbers are both inclusive.
