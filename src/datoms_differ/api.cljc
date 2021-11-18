@@ -262,6 +262,8 @@
   (with-sources db {source entity-maps}))
 
 (defn- empty-db [schema]
+  (when-not (map? schema)
+    (throw (ex-info "Expected schema to be a map." {:type (type schema)})))
   {:schema schema
    :refs {}
    :eavs (d/empty-eavs)})
