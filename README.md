@@ -102,7 +102,7 @@ another part of the new data (not yet asserted).
 There's also some tools for exporting to datascript. This lets you create a
 datascript db in the client, and then keep it up to date with new txes.
 
-Use `[datoms-differ.export]` with `(export-db db)` that gives you a string that
+Use `[datoms-differ.api]` with `(export-db db)` that gives you a string that
 can be read by clojurescript (when datascript is loaded) to create a datascript
 db.
 
@@ -110,45 +110,6 @@ If you want to reduce the amount of bytes sent over the wire, you can also use
 `(prune-diffs schema tx-data)` to remove retractions of values that are later
 asserted. This optimalisation is possible since datascript doesn't have a notion
 of history.
-
-## ~~Using `:db/id` to identify entities~~
-
-**Avoid this feature. It's not a good idea.**
-
-Normally datoms-differ maintains its own internal entity ids. However, entities
-with a `:db/id` asserted will be allocated this exact entity id in the resulting
-datascript database. This can be useful.
-
-### An issue you probably won't ever have to think about
-
-Note that datoms-differ uses internal entity ids in the [0x10000000
-0x1FFFFFFF] partition, and disallows `:db/id`s in this range with an error:
-
-> Asserted :db/ids cannot be within the internal db-id-partition
-
-You can change the internal db-id-partition by specifying it as part of the schema:
-
-```
-    (create-conn (assoc schema :datoms-differ.api/db-id-partition {:from 1024 :to 2048}))
-```
-
-These numbers are both inclusive.
-
-## ~~Partial updates~~
-
-**Avoid this feature too. It's also not a good idea.**
-
-Datoms differ retracts facts that are not restated in new transactions. If you
-want to update some information without having to rebuild everything, you can
-add `:partial-update? true` meta to the list of entity maps.
-
-```
-(dd/transact! conn :my-source
-              (with-meta
-                [{:vessel/imo "123"
-                  :vessel/name "Updated name"}]
-                {:partial-update? true}))
-```
 
 ## Contribute
 
@@ -162,12 +123,6 @@ certainly break it later.
 `bin/kaocha --watch` will run all the tests indefinitely. It sets up a
 watcher on the code files. If they change, only the relevant tests will be
 run again.
-
-## Contributors
-
-- [Odin Hole Standal](https://github.com/Odinodin) allowed using `:db/id` as entity identifier.
-
-Thanks!
 
 ## License
 
