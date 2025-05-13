@@ -51,10 +51,10 @@
     (if (empty? remaining-changes)
       result
       (let [same-e (->> remaining-changes
-                        (group-by (fn [[event e a v]] e))
+                        (group-by (fn [[_event e _a _v]] e))
                         (max-by (fn [[_ entries]] (count entries))))
             same-event+a (->> remaining-changes
-                              (group-by (fn [[event e a v]] [event a]))
+                              (group-by (fn [[event _e a _v]] [event a]))
                               (max-by (fn [[_ entries]] (count entries))))
             num-same-e-entries (count (second same-e))
             num-same-event+a-entries (count (second same-event+a))]
@@ -80,9 +80,6 @@
                      [a v]))
                  datoms)))
 
-(defn- fffirst [mmm]
-  (first (ffirst mmm)))
-
 (defn find-entire-entity-changes [old-datoms new-datoms]
   (let [old-es (set (map first old-datoms))
         new-es (set (map first new-datoms))
@@ -97,8 +94,8 @@
                                  [(ffirst es) e])))
                            added-entities))
         changed? (set (mapcat identity changed-es))
-        removed-entities (remove (fn [[e summary]] (changed? e)) removed-entities)
-        added-entities (remove (fn [[e summary]] (changed? e)) added-entities)]
+        removed-entities (remove (fn [[e _summary]] (changed? e)) removed-entities)
+        added-entities (remove (fn [[e _summary]] (changed? e)) added-entities)]
     (cond-> []
       (seq removed-entities) (into (for [[k v] (group-by ffirst removed-entities)]
                                      [:removed-entities k v]))
@@ -177,20 +174,20 @@
                       (str (pr-data k) " " (pr-data v)))}))
 
       (= :same-entity t)
-      (let [[e changes] args]
-        (let [types (set (map first changes))
-              all-same-type? (= 1 (count types))]
-          {:text (if all-same-type?
-                   (case (first types)
-                     :added (str "Added " (count changes) " attributes to " e)
-                     :removed (str "Removed " (count changes) " attributes from " e)
-                     :changed (str "Changed " (count changes) " attributes for " e))
-                   (str "Changed " (count changes) " attributes for " e))
-           :details (for [[event a v] changes]
-                      (cond
-                        (= :added event) (str (when-not all-same-type? "added ") a " " (pr-data v))
-                        (= :removed event) (str (when-not all-same-type? "removed ") a " " (pr-data v))
-                        (= :changed event) (str "changed " a " to " (pr-data (second v)))))}))
+      (let [[e changes] args
+            types (set (map first changes))
+            all-same-type? (= 1 (count types))]
+        {:text (if all-same-type?
+                 (case (first types)
+                   :added (str "Added " (count changes) " attributes to " e)
+                   :removed (str "Removed " (count changes) " attributes from " e)
+                   :changed (str "Changed " (count changes) " attributes for " e))
+                 (str "Changed " (count changes) " attributes for " e))
+         :details (for [[event a v] changes]
+                    (cond
+                      (= :added event) (str (when-not all-same-type? "added ") a " " (pr-data v))
+                      (= :removed event) (str (when-not all-same-type? "removed ") a " " (pr-data v))
+                      (= :changed event) (str "changed " a " to " (pr-data (second v)))))})
 
       (= :several-entities t)
       (let [[t a entities] args]
@@ -207,7 +204,7 @@
           {:text (str "Changed " a " for " (count entities) " entities")
            :details (summarize-entities entities "for" "replaced")})))))
 
-(defn render-report! [report]
+(defn ^:export render-report! [report]
   (doseq [{:keys [text details]} report]
     (println (clansi/style
               text

@@ -1,10 +1,5 @@
-(ns datoms-differ.impl.core-helpers)
-
-(defn- find-identity-attrs [schema]
-  (set (keep (fn [[k v]]
-               (when (= :db.unique/identity (:db/unique v))
-                 k))
-             schema)))
+(ns datoms-differ.impl.core-helpers
+  (:import (clojure.lang RT)))
 
 (defn- find-attr [schema target-k target-v]
   (set (keep (fn [[k v]]
@@ -12,7 +7,7 @@
                  k))
              schema)))
 
-(defn- validate-attrs [{:keys [many? ref? tuple?]}]
+(defn- validate-attrs [{:keys [many? tuple?]}]
   (doseq [[k tupleAttrs] tuple?]
     (doseq [tupleAttr tupleAttrs]
       (when (many? tupleAttr)
@@ -60,7 +55,7 @@
 (defn- select-first-entry-of [map keyseq]
   (loop [ret nil keys (seq keyseq)]
     (when keys
-      (if-let [entry (. clojure.lang.RT (find map (first keys)))]
+      (if-let [entry (. RT (find map (first keys)))]
         entry
         (recur ret (next keys))))))
 

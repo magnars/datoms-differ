@@ -1,10 +1,9 @@
 (ns datoms-differ.api-test
   (:require [datoms-differ.api :as sut]
             [datoms-differ.datom :as d]
-            [datoms-differ.impl.core-helpers :as ch]
-            [clojure.test :refer [deftest is testing]]
-            [me.tonsky.persistent-sorted-set :as set]
-            [clojure.string :as str]))
+            [clojure.set :as set]
+            [clojure.test :refer [deftest is testing]])
+  (:import (java.lang Exception)))
 
 (def schema
   {::sut/db-id-partition {:from 1024 :to 2048}
@@ -29,8 +28,6 @@
    :my-tuple/b {}
    :my-tuple/tup {:db/tupleAttrs [:my-tuple/a :my-tuple/b]}})
 
-(def attrs (ch/find-attrs schema))
-
 (deftest create-conn
   (is (= @(sut/create-conn schema)
          {:schema schema
@@ -47,7 +44,7 @@
         "Difference in refs (added)"))
   (when eavs-added
     (is (= (-> report :db-after :eavs)
-           (clojure.set/union (-> report :db-after :eavs) eavs-added))
+           (set/union (-> report :db-after :eavs) eavs-added))
         "Difference in eavs (added)")))
 
 (defn db []

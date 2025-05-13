@@ -18,7 +18,7 @@
   [schema]
   (map-vals #(filter-keys (fn [k] (= (namespace k) "db")) %) schema))
 
-(defn export-db [db]
+(defn ^:export export-db [db]
   (export (prep-for-datascript (:schema db)) (get-datoms db)))
 
 (defn prune-diffs [schema tx-data]

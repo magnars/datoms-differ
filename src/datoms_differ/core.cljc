@@ -51,7 +51,7 @@
                   (for [ref-entity-map (if (component? reverse-k) [v] v)]
                     [(refs (ch/get-entity-ref attrs ref-entity-map)) reverse-k eid]))
 
-                :else-scalar
+                :else ;; scalar
                 (doall
                  (for [v (if (many? k) v [v])]
                    (do
@@ -101,7 +101,7 @@
    :refs {}
    :source-datoms {}})
 
-(defn create-conn [schema]
+(defn ^:export create-conn [schema]
   (atom (empty-db schema)))
 
 (defn get-datoms [db]
@@ -109,13 +109,13 @@
 
 (defn disallow-conflicting-sources [db]
   (let [{:keys [many? ref?]} (ch/find-attrs (:schema db))]
-    (doseq [[[e a] datoms] (->> (:source-datoms db)
-                                (mapcat (fn [[source datoms]]
-                                          (keep (fn [[e a v]]
-                                                  (when-not (many? a)
-                                                    {:e e :a a :v v :source source}))
-                                                datoms)))
-                                (group-by (fn [{:keys [e a]}] [e a])))]
+    (doseq [[_ datoms] (->> (:source-datoms db)
+                            (mapcat (fn [[source datoms]]
+                                      (keep (fn [[e a v]]
+                                              (when-not (many? a)
+                                                {:e e :a a :v v :source source}))
+                                            datoms)))
+                            (group-by (fn [{:keys [e a]}] [e a])))]
       (when (< 1 (count (set (map :v datoms))))
         (let [e->entity-ref (set/map-invert (:refs db))]
           (throw
@@ -149,7 +149,7 @@
      :db-before db
      :db-after db-after}))
 
-(defn transact! [conn source entity-maps]
+(defn ^:export transact! [conn source entity-maps]
   (let [report (atom nil)]
     (swap! conn (fn [db]
                   (let [r (with db source entity-maps)]
@@ -157,7 +157,7 @@
                     (:db-after r))))
     @report))
 
-(defn transact-sources! [conn source->entity-maps]
+(defn ^:export transact-sources! [conn source->entity-maps]
   (let [report (atom nil)]
     (swap! conn (fn [db]
                   (let [r (with-sources db source->entity-maps)]

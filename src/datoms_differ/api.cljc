@@ -1,8 +1,9 @@
 (ns datoms-differ.api
-  (:require [datoms-differ.datom :as d]
+  (:require [clojure.set :as set]
+            [datoms-differ.datom :as d]
             [datoms-differ.export :as dd-export]
             [datoms-differ.impl.core-helpers :as ch]
-            [me.tonsky.persistent-sorted-set :as set]
+            [me.tonsky.persistent-sorted-set :as sset]
             [medley.core :refer [map-vals]])
   (:import [datoms_differ.datom Datom]))
 
@@ -27,10 +28,10 @@
   {:from 0x10000000
    :to   0x1FFFFFFF})
 
-(defn- get-lowest-new-eid [{:keys [from to]} eavs]
+(defn- get-lowest-new-eid [{:keys [from _to]} eavs]
   (inc (max
         (dec from)
-        (or (-> eavs (set/rslice nil nil) first :e) 0))))
+        (or (-> eavs (sset/rslice nil nil) first :e) 0))))
 
 (defn- create-refs-lookup [{:keys [schema attrs eavs refs]} entities]
   (let [{:keys [from to] :as db-id-partition} (::db-id-partition schema default-db-id-partition)
@@ -92,7 +93,7 @@
                            acc
                            (if (component? reverse-k) [v] v)))
 
-                 :else-scalar
+                 :else ;; scalar
                  (reduce (fn [acc v]
                            (disallow-nils k v entity)
                            (conj! acc (d/datom eid k v source)))
@@ -104,7 +105,7 @@
          persistent!
          d/to-eavs)))
 
-(defn- explode-entity-maps [source {:keys [schema attrs] :as db} entity-maps]
+(defn- explode-entity-maps [source {:keys [attrs] :as db} entity-maps]
   (let [all-entities (->> entity-maps
                           (ch/find-all-entities attrs)
                           (map (partial ch/add-tuple-attributes attrs)))
@@ -138,7 +139,7 @@
      (if (many? (.-a d))
        acc
        (let [search-d (d/datom (.-e d) (.-a d) nil nil)
-             datoms (set/slice eavs search-d search-d)]
+             datoms (sset/slice eavs search-d search-d)]
          (if (find-conflicting-value many? datoms)
            (reduced [(.-e d) (.-a d)])
            acc))))
@@ -148,8 +149,8 @@
 (defn- throw-conflicting-values
   [{:keys [attrs eavs refs]} [e a]]
   (let [{:keys [ref?]} attrs
-        e->entity-ref (clojure.set/map-invert refs)
-        datoms (set/slice eavs (d/datom e a nil nil) (d/datom e a nil nil))
+        e->entity-ref (set/map-invert refs)
+        datoms (sset/slice eavs (d/datom e a nil nil) (d/datom e a nil nil))
         v-fn (if (ref? a) (comp e->entity-ref :v) :v)]
     (throw
      (ex-info "Conflicting values asserted for entity"
@@ -206,7 +207,7 @@
       (persistent!
        (reduce (fn [acc [e a v]]
                  (if (and (identity? a)
-                          (not (set/slice eavs (d/datom e a nil nil) (d/datom e a nil nil))))
+                          (not (sset/slice eavs (d/datom e a nil nil) (d/datom e a nil nil))))
                    (dissoc! acc [a v])
                    acc))
                (transient refs)
@@ -238,7 +239,7 @@
      [:db/add (.-e d) (.-a d) (.-v d)])))
 
 (defn with-sources [db source->entity-maps]
-  (let [{:keys [many?] :as attrs} (ch/find-attrs (:schema db))
+  (let [attrs (ch/find-attrs (:schema db))
         update-refs #(assoc % :refs (prune-refs %))
         db-after (->> source->entity-maps
                       (reduce (fn [db [source entity-maps]]
@@ -302,8 +303,8 @@
                                                            entity-maps)]
 
     (when-let [[e a] (find-conflicting-value many? datoms)]
-      (let [e->entity-ref (clojure.set/map-invert refs)
-            conflicting-datoms (set/slice datoms (d/datom e a nil nil) (d/datom e a nil nil))
+      (let [e->entity-ref (set/map-invert refs)
+            conflicting-datoms (sset/slice datoms (d/datom e a nil nil) (d/datom e a nil nil))
             v-fn (if (ref? a) (comp e->entity-ref :v) :v)]
         (throw (ex-info "Conflicting values asserted for entity"
                         {:entity-ref (e->entity-ref e)

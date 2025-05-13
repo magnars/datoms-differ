@@ -1,6 +1,7 @@
 (ns datoms-differ.datom
-  (:require [me.tonsky.persistent-sorted-set :as set]
-            [me.tonsky.persistent-sorted-set.arrays :as a]))
+  (:require [me.tonsky.persistent-sorted-set :as sset])
+  (:import (clojure.lang Seqable IPersistentCollection Indexed ILookup Associative MapEntry)
+           (java.lang IllegalArgumentException Object UnsupportedOperationException)))
 
 (defn combine-hashes [x y]
   #?(:clj  (clojure.lang.Util/hashCombine x y)
@@ -18,30 +19,31 @@
       _hash))
   (toString [d] (pr-str d))
 
-  clojure.lang.Seqable
+  Seqable
   (seq [d] (seq-datom d))
 
-  clojure.lang.IPersistentCollection
+  IPersistentCollection
   (equiv [d o] (and (instance? Datom o) (equiv-datom d o)))
-  (empty [d] (throw (UnsupportedOperationException. "empty is not supported on Datom")))
-  (count [d] 4)
+  (empty [_] (throw (UnsupportedOperationException. "empty is not supported on Datom")))
+  (count [_] 4)
   (cons [d [k v]] (assoc-datom d k v))
 
-  clojure.lang.Indexed
+  Indexed
   (nth [this i]           (nth-datom this i))
   (nth [this i not-found] (nth-datom this i not-found))
 
-  clojure.lang.ILookup
+  ILookup
   (valAt [d k] (val-at-datom d k nil))
   (valAt [d k nf] (val-at-datom d k nf))
 
-  clojure.lang.Associative
-  (entryAt [d k] (some->> (val-at-datom d k nil) (clojure.lang.MapEntry k)))
-  (containsKey [e k] (#{:e :a :v :s} k))
+  Associative
+  (entryAt [d k] (when-let [v (val-at-datom d k nil)]
+                   (MapEntry. k v)))
+  (containsKey [_ k] (#{:e :a :v :s} k))
   (assoc [d k v] (assoc-datom d k v)))
 
 
-(defn ^Datom datom [e a v s] (Datom. e a v s 0))
+(defn datom ^Datom [e a v s] (Datom. e a v s 0))
 
 
 (defn- hash-datom [^Datom d]
@@ -84,7 +86,7 @@
      3 (.-s d)
      not-found)))
 
-(defn- ^Datom assoc-datom [^Datom d k v]
+(defn- assoc-datom ^Datom [^Datom d k v]
   (case k
     :e (datom v       (.-a d) (.-v d) (.-s d) )
     :a (datom (.-e d) v       (.-v d) (.-s d) )
@@ -97,9 +99,6 @@
      (.write w (str "#differ/Datom "))
      (binding [*out* w]
        (pr [(.-e d) (.-a d) (.-v d) (.-s d)]))))
-
-(defn ^Datom datom-from-reader [vec]
-  (apply datom vec))
 
 ;; Comparing datoms
 #?(:clj
@@ -125,11 +124,11 @@
           (compare o1 o2))))
 
 (extend-protocol DatomValueComparator
-  java.lang.Object
+  Object
   (compare-value [o1 o2] (cmp o1 o2))
 
   nil
-  (compare-value [o1 o2] 0))
+  (compare-value [_ _] 0))
 
 (defn cmp-datoms-eavs [^Datom d1, ^Datom d2]
   (combine-cmp
@@ -145,22 +144,19 @@
    (compare-value (.-v d1) (.-v d2))))
 
 (defn empty-eavs []
-  (set/sorted-set-by cmp-datoms-eavs))
+  (sset/sorted-set-by cmp-datoms-eavs))
 
 (defn to-eavs [datoms]
   (if (seq datoms)
-    (set/from-sequential cmp-datoms-eavs datoms)
+    (sset/from-sequential cmp-datoms-eavs datoms)
     (empty-eavs)))
-
-(defn empty-eav-only []
-  (set/sorted-set-by cmp-datoms-eav-only))
 
 (defn to-eav-only [datoms]
   (if (seq datoms)
     (->> datoms
          (reduce conj! (transient []))
          persistent!
-         (set/from-sequential cmp-datoms-eav-only))
+         (sset/from-sequential cmp-datoms-eav-only))
     (empty-eavs)))
 
 (defn diff-in-value? [^Datom a ^Datom b]
@@ -172,6 +168,6 @@
   (identical? source (.s d)))
 
 (defn contains-eav? [eavs ^Datom d]
-  (set/slice eavs
-             (datom (.-e d) (.-a d) (.-v d) nil)
-             (datom (.-e d) (.-a d) (.-v d) nil)))
+  (sset/slice eavs
+              (datom (.-e d) (.-a d) (.-v d) nil)
+              (datom (.-e d) (.-a d) (.-v d) nil)))

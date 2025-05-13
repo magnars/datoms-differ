@@ -1,5 +1,5 @@
 (ns datoms-differ.export-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [clojure.test :refer [deftest is]]
             [datoms-differ.core-test :refer [schema]]
             [datoms-differ.export :as sut]))
 
