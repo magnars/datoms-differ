@@ -3,7 +3,7 @@
   :url "http://github.com/magnars/datoms-differ"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
-  :dependencies [[medley "1.2.0"]
+  :dependencies [[dev.weavejester/medley "1.9.0"]
                  [clansi "1.0.0"]
                  [persistent-sorted-set "0.1.2"]]
   :profiles {:dev {:dependencies [[org.clojure/clojure "1.10.1"]
