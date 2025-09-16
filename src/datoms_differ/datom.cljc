@@ -165,7 +165,7 @@
        (not= (.-v a) (.-v b))))
 
 (defn source-equals? [source ^Datom d]
-  (identical? source (.s d)))
+  (= source (.s d)))
 
 (defn contains-eav? [eavs ^Datom d]
   (sset/slice eavs
