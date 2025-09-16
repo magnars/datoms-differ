@@ -65,7 +65,7 @@ transacts them into the connection.
 [{:route/number "100"
   :route/name "Stavanger-Tau"
   :route/vessels [{:vessel/imo "123"
-                   :vessel/mmsi "456}]}
+                   :vessel/mmsi "456"}]}
  {:vessel/imo "123"
   :vessel/name "MF Hardanger"}]
 ```
