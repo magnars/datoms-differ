@@ -1,4 +1,4 @@
-(defproject datoms-differ "2020-08-09"
+(defproject datoms-differ "2025-09-16"
   :description "Find the diff between two txes in datoms."
   :url "http://github.com/magnars/datoms-differ"
   :license {:name "Eclipse Public License"

@@ -28,7 +28,7 @@ Yeah, still a good question.
 
 ## Install
 
-Add `[datoms-differ "2020-08-09"]` to `:dependencies` in your `project.clj`.
+Add `[datoms-differ "2025-09-16"]` to `:dependencies` in your `project.clj`.
 
 ## API
 
