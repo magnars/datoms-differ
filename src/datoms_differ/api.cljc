@@ -243,8 +243,6 @@
         update-refs #(assoc % :refs (prune-refs %))
         db-after (->> source->entity-maps
                       (reduce (fn [db [source entity-maps]]
-                                (when-not (keyword? source)
-                                  (throw (ex-info "Source must be a keyword." {:source source})))
                                 (let [{:keys [datoms refs]} (explode-entity-maps source db entity-maps)
                                       [retracted added] (find-source-diffs source (:eavs db) datoms)]
                                   (-> db
@@ -285,7 +283,7 @@
     @report))
 
 (defn transact!
-  "Takes a connection, a keyword source identifier and a list of entity maps, and transacts them into the connection."
+  "Takes a connection, a source identifier and a list of entity maps, and transacts them into the connection."
   [conn source entity-maps]
   (transact-sources! conn {source entity-maps}))
 

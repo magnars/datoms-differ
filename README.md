@@ -52,7 +52,7 @@ Like datascript, datoms-differ only cares about `:db.unique/identity`,
 
 ### `(transact! conn source entity-maps)`
 
-Takes a connection, a keyword source identifier and a list of entity maps, and
+Takes a connection, a source identifier and a list of entity maps, and
 transacts them into the connection.
 
 - `conn` - the atom you created with `create-conn`

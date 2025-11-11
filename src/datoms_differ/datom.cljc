@@ -135,7 +135,7 @@
    (#?(:clj Integer/compare :cljs -) (.-e d1) (.-e d2))
    (cmp (.-a d1) (.-a d2))
    (compare-value (.-v d1) (.-v d2))
-   (cmp (.-s d1) (.-s d2))))
+   (compare-value (.-s d1) (.-s d2))))
 
 (defn cmp-datoms-eav-only [^Datom d1, ^Datom d2]
   (combine-cmp

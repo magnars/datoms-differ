@@ -51,11 +51,6 @@
   @(sut/create-conn schema))
 
 (deftest with
-  (testing "source not keyword throws"
-    (is (thrown-with-msg? Exception
-                          #"Source must be a keyword"
-                          (sut/with (db) "prepare" []))))
-
   (testing "EMPTY DB, ONE SOURCE"
 
     (testing "empty db no entities returns same"
@@ -73,6 +68,13 @@
                   [:db/add 1024 :route/number "800"]]
         :eavs #{(d/datom 1024 :route/number "800" :prepare-routes)
                 (d/datom 1024 :route/name "Røvær" :prepare-routes)}
+        :refs {[:route/number "800"] 1024}}))
+
+    (testing "non-keyword source"
+      (assert-report
+       (sut/with (db) [:prepare-routes 1] [{:route/number "800"}])
+       {:tx-data [[:db/add 1024 :route/number "800"]]
+        :eavs #{(d/datom 1024 :route/number "800" [:prepare-routes 1])}
         :refs {[:route/number "800"] 1024}}))
 
     (testing "empty db one entity and cardinality many"
@@ -390,12 +392,6 @@
                       (ex-data e)))))))))
 
 (deftest with-sources
-  (testing "source not keyword throws"
-    (is (thrown-with-msg? Exception
-                          #"Source must be a keyword"
-                          (sut/with-sources (db) {:source []
-                                                  "source-2" []}))))
-
   (testing "EMPTY DB, MULTIPLE SOURCES"
     (testing "empty db two sources "
       (assert-report
