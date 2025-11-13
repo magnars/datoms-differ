@@ -97,6 +97,9 @@ multiple sources updating at once, this also avoids an issue where old data +
 partial new data would make a conflict, where the conflict is resolved in
 another part of the new data (not yet asserted).
 
+Note that all `source`s must be comparable with `compare`, since they are sorted
+in indices.
+
 ## Exporting to datascript
 
 There's also some tools for exporting to datascript. This lets you create a
