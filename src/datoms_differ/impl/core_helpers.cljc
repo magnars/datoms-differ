@@ -38,19 +38,20 @@
                (if (some entity tupleAttrs)
                  (assoc e k (mapv #(get e %) tupleAttrs))
                  e))
-          entity
-          (:tuple? attrs)))
+             entity
+             (:tuple? attrs)))
 
-(defn get-entity-ref [attrs entity]
-  (let [refs (select-keys entity (conj (:identity? attrs) :db/id))]
-    (case (bounded-count 2 refs)
-      0 (throw (ex-info "Entity without identity attribute"
-                        {:entity entity
-                         :attrs (:identity attrs)}))
-      1 (first refs)
-      2 (throw (ex-info (str "Entity with multiple identity attributes: " refs)
-                        {:entity entity
-                         :attrs (:identity? attrs)})))))
+(defn get-entity-refs [attrs entity]
+  (or (loop [ret nil
+             keys (conj (seq (:identity? attrs)) :db/id)]
+        (if (empty? keys)
+          ret
+          (if-let [entry (. RT (find entity (first keys)))]
+            (recur (conj ret entry) (next keys))
+            (recur ret (next keys)))))
+      (throw (ex-info "Entity without identity attribute"
+                      {:entity entity
+                       :attrs (:identity attrs)}))))
 
 (defn- select-first-entry-of [map keyseq]
   (loop [ret nil keys (seq keyseq)]
@@ -59,7 +60,7 @@
         entry
         (recur ret (next keys))))))
 
-(defn get-entity-ref-unsafe [attrs entity-map]
+(defn get-one-entity-ref [attrs entity-map]
   (select-first-entry-of entity-map (:identity? attrs)))
 
 (defn reverse-ref? [k]

@@ -1,6 +1,6 @@
 (ns datoms-differ.impl.core-helpers-test
-  (:require [datoms-differ.impl.core-helpers :as sut]
-            [clojure.test :refer [deftest is testing]]))
+  (:require [clojure.test :refer [deftest is testing]]
+            [datoms-differ.impl.core-helpers :as sut]))
 
 (def schema
   {:route/name {}
@@ -68,22 +68,21 @@
          {:foo :bar})))
 
 (deftest gets-entity-refs
-  (is (= (sut/get-entity-ref attrs {:route/number "100" :route/name "Stavanger-Tau"})
-         [:route/number "100"]))
+  (is (= (sut/get-entity-refs attrs {:route/number "100" :route/name "Stavanger-Tau"})
+         [[:route/number "100"]]))
 
   (is (= (->> {:holiday/pattern :christmas-eve :holiday/weekday :sunday}
               (sut/add-tuple-attributes attrs)
-              (sut/get-entity-ref attrs))
-         [:holiday/bus-key [:christmas-eve :sunday]]))
-
-  (is (thrown? Exception ;; multiple identity attributes
-               (sut/get-entity-ref attrs {:route/number "100" :service/id 200 :route/name "Stavanger-Tau"})))
+              (sut/get-entity-refs attrs))
+         [[:holiday/bus-key [:christmas-eve :sunday]]]))
 
   (is (thrown? Exception ;; no identity attributes
-               (sut/get-entity-ref attrs {:route/name "Stavanger-Tau"})))
+               (sut/get-entity-refs attrs {:route/name "Stavanger-Tau"})))
 
-  (is (= (sut/get-entity-ref attrs {:db/id 123456 :route/name "100"})
-         [:db/id 123456])))
+  (is (= (sut/get-entity-refs attrs {:route/number "100"
+                                     :service/id :service-1})
+         [[:service/id :service-1]
+          [:route/number "100"]])))
 
 (deftest finds-all-entities
   (is (= (sut/find-all-entities attrs [{:route/number "100"

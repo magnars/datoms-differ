@@ -26,11 +26,22 @@
                             [ref eid]))))
          (into old-refs))))
 
+(defn get-entity-ref [attrs entity]
+  (let [refs (select-keys entity (conj (:identity? attrs) :db/id))]
+    (case (bounded-count 2 refs)
+      0 (throw (ex-info "Entity without identity attribute"
+                        {:entity entity
+                         :attrs (:identity attrs)}))
+      1 (first refs)
+      2 (throw (ex-info (str "Entity with multiple identity attributes: " refs)
+                        {:entity entity
+                         :attrs (:identity? attrs)})))))
+
 (defn flatten-entity-map [{:keys [ref? many? component?] :as attrs} refs entity]
-  (let [eid (refs (ch/get-entity-ref attrs entity))
+  (let [eid (refs (get-entity-ref attrs entity))
         disallow-nils (fn [k v]
                         (when (nil? v)
-                          (throw (ex-info "Attributes cannot be nil" {:entity (ch/get-entity-ref attrs entity)
+                          (throw (ex-info "Attributes cannot be nil" {:entity (get-entity-ref attrs entity)
                                                                       :key k}))))]
     (mapcat (fn [[k v]]
               (cond
@@ -44,12 +55,12 @@
                      (disallow-nils k v)
                      [eid k (if (number? v)
                               v
-                              (refs (ch/get-entity-ref attrs v)))])))
+                              (refs (get-entity-ref attrs v)))])))
 
                 (ch/reverse-ref? k)
                 (let [reverse-k (ch/reverse-ref-attr k)]
                   (for [ref-entity-map (if (component? reverse-k) [v] v)]
-                    [(refs (ch/get-entity-ref attrs ref-entity-map)) reverse-k eid]))
+                    [(refs (get-entity-ref attrs ref-entity-map)) reverse-k eid]))
 
                 :else ;; scalar
                 (doall
@@ -81,7 +92,7 @@
 (defn explode [{:keys [schema refs]} entity-maps]
   (let [attrs (ch/find-attrs schema)
         all-entities (ch/find-all-entities attrs entity-maps)
-        entity-refs (distinct (map #(ch/get-entity-ref attrs %) all-entities))
+        entity-refs (distinct (map #(get-entity-ref attrs %) all-entities))
         new-refs (create-refs-lookup (::db-id-partition schema default-db-id-partition) refs entity-refs)
         datoms (set (mapcat #(flatten-entity-map attrs new-refs %) all-entities))]
     (disallow-conflicting-values new-refs attrs datoms)

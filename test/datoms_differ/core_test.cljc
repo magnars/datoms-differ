@@ -72,6 +72,19 @@
 
   )
 
+(deftest gets-entity-ref
+  (is (= (sut/get-entity-ref attrs {:route/number "100" :route/name "Stavanger-Tau"})
+         [:route/number "100"]))
+
+  (is (thrown? Exception ;; no identity attributes
+               (sut/get-entity-ref attrs {:route/name "Stavanger-Tau"})))
+
+  (is (thrown? Exception ;; multiple identity attributes
+               (sut/get-entity-ref attrs {:route/number "100" :service/id 200 :route/name "Stavanger-Tau"})))
+
+  (is (= (sut/get-entity-ref attrs {:db/id 123456 :route/name "100"})
+         [:db/id 123456])))
+
 (deftest flattens-entity-map
   (is (= (sut/flatten-entity-map attrs
                                  {[:route/number "100"] 1024

@@ -330,7 +330,21 @@
                   :attr :holiday/extra
                   :conflict {:prepare #{:foo :bar}}}
                  (ex-data e))))
-        )))
+        ))
+
+    (testing "empty db one entity with multiple identity attrs"
+      (assert-report
+       (sut/with (db) :prepare-routes [{:route/number "800"
+                                        :service/id :service-1
+                                        :route/name "Røvær"}])
+       {:tx-data [[:db/add 1024 :route/name "Røvær"]
+                  [:db/add 1024 :route/number "800"]
+                  [:db/add 1024 :service/id :service-1]]
+        :eavs #{(d/datom 1024 :route/number "800" :prepare-routes)
+                (d/datom 1024 :route/name "Røvær" :prepare-routes)
+                (d/datom 1024 :service/id :service-1 :prepare-routes)}
+        :refs {[:route/number "800"] 1024
+               [:service/id :service-1] 1024}})))
 
   (testing "PREVIOUS DB, ONE SOURCE"
     (testing "Same entitie(s) gives no diff"
@@ -384,6 +398,22 @@
           :eavs #{(d/datom 1025 :route/number "700" :prepare-routes)
                   (d/datom 1025 :route/name "Døvær" :prepare-routes)}
           :refs {[:route/number "700"] 1025}})))
+
+    (testing "Adding and removing identity attrs"
+      (let [{:keys [db-after]} (sut/with (db) :prepare-routes [{:route/number "800"
+                                                                :service/id :service-1
+                                                                :route/name "Røvær"}])]
+        (assert-report
+         (sut/with db-after :prepare-routes [{:route/number "800"
+                                              :trip/id :trip-2
+                                              :route/name "Røvær"}])
+         {:tx-data [[:db/retract 1024 :service/id :service-1]
+                    [:db/add 1024 :trip/id :trip-2]]
+          :eavs #{(d/datom 1024 :route/number "800" :prepare-routes)
+                  (d/datom 1024 :route/name "Røvær" :prepare-routes)
+                  (d/datom 1024 :trip/id :trip-2 :prepare-routes)}
+          :refs {[:route/number "800"] 1024
+                 [:trip/id :trip-2] 1024}})))
 
     (testing "Added new entity and remove one gives add/remove txes, new datoms and new refs"
       (let [{:keys [db-after]} (sut/with (db) :prepare-routes [{:route/number "800"
@@ -508,7 +538,40 @@
                  (d/datom 1024 :service/trips 1025 :source-1)
                  (d/datom 1024 :service/trips 1026 :source-2)
                  (d/datom 1025 :trip/id "bar" :source-1)
-                 (d/datom 1026 :trip/id "foo" :source-2)})))))
+                 (d/datom 1026 :trip/id "foo" :source-2)}))))
+
+    (testing "Multiple identity attributes across sources"
+      (assert-report
+       (sut/with-sources @(sut/create-conn (merge schema
+                                                  {:vessel/mmsi {:db/unique :db.unique/identity}
+                                                   :trip/vessel {:db/valueType :db.type/ref
+                                                                 :db/cardinality :db.cardinality/one}}))
+         {:prepare-vessels [{:vessel/imo "123" :vessel/mmsi "abc"}
+                            {:vessel/imo "456" :vessel/mmsi "def"}]
+          :prepare-services [{:service/id :s123
+                              :service/allocated-vessel {:vessel/imo "123"}}]
+          :prepare-trips [{:trip/id "foo" :trip/vessel {:vessel/mmsi "abc"}}
+                          {:trip/id "bar" :trip/vessel {:vessel/mmsi "def"}}]})
+       {:refs {[:vessel/imo "123"] 1024
+               [:vessel/mmsi "abc"] 1024
+               [:vessel/imo "456"] 1025
+               [:vessel/mmsi "def"] 1025
+               [:service/id :s123] 1026
+               [:trip/id "foo"] 1027
+               [:trip/id "bar"] 1028}
+        :eavs #{(d/datom 1024 :vessel/imo "123" :prepare-services)
+                (d/datom 1024 :vessel/imo "123" :prepare-vessels)
+                (d/datom 1024 :vessel/mmsi "abc" :prepare-trips)
+                (d/datom 1024 :vessel/mmsi "abc" :prepare-vessels)
+                (d/datom 1025 :vessel/imo "456" :prepare-vessels)
+                (d/datom 1025 :vessel/mmsi "def" :prepare-trips)
+                (d/datom 1025 :vessel/mmsi "def" :prepare-vessels)
+                (d/datom 1026 :service/allocated-vessel 1024 :prepare-services)
+                (d/datom 1026 :service/id :s123 :prepare-services)
+                (d/datom 1027 :trip/id "foo" :prepare-trips)
+                (d/datom 1027 :trip/vessel 1024 :prepare-trips)
+                (d/datom 1028 :trip/id "bar" :prepare-trips)
+                (d/datom 1028 :trip/vessel 1025 :prepare-trips)}})))
 
   (testing "PREVIOUS DB, MULTIPLE SOURCES"
     (testing "Add and remove across sources"
@@ -557,7 +620,107 @@
                  [:vessel/imo "234"] 1025
                  [:service/id :s123] 1026
                  [:service/id :s234] 1027
-                 [:vessel/imo "345"] 1028}})))))
+                 [:vessel/imo "345"] 1028}})))
+
+    (testing "Multiple identity attributes across sources"
+      (let [{:keys [db-after]} (sut/with-sources @(sut/create-conn (merge schema
+                                                                          {:vessel/mmsi {:db/unique :db.unique/identity}
+                                                                           :trip/vessel {:db/valueType :db.type/ref
+                                                                                         :db/cardinality :db.cardinality/one}}))
+                                 {:prepare-vessels [{:vessel/imo "123" :vessel/mmsi "abc"}
+                                                    {:vessel/imo "456" :vessel/mmsi "def"}]
+                                  :prepare-services [{:service/id :s123
+                                                      :service/allocated-vessel {:vessel/imo "123"}}]
+                                  :prepare-trips [{:trip/id "foo" :trip/vessel {:vessel/mmsi "abc"}}
+                                                  {:trip/id "bar" :trip/vessel {:vessel/mmsi "def"}}]})]
+        (assert-report
+         (sut/with db-after :prepare-services [])
+         {:refs {[:vessel/imo "123"] 1024
+                 [:vessel/mmsi "abc"] 1024
+                 [:vessel/imo "456"] 1025
+                 [:vessel/mmsi "def"] 1025
+                 [:trip/id "foo"] 1027
+                 [:trip/id "bar"] 1028}
+          :eavs #{(d/datom 1024 :vessel/imo "123" :prepare-vessels)
+                  (d/datom 1024 :vessel/mmsi "abc" :prepare-trips)
+                  (d/datom 1024 :vessel/mmsi "abc" :prepare-vessels)
+                  (d/datom 1025 :vessel/imo "456" :prepare-vessels)
+                  (d/datom 1025 :vessel/mmsi "def" :prepare-trips)
+                  (d/datom 1025 :vessel/mmsi "def" :prepare-vessels)
+                  (d/datom 1027 :trip/id "foo" :prepare-trips)
+                  (d/datom 1027 :trip/vessel 1024 :prepare-trips)
+                  (d/datom 1028 :trip/id "bar" :prepare-trips)
+                  (d/datom 1028 :trip/vessel 1025 :prepare-trips)}})
+
+        (assert-report
+         (sut/with db-after :prepare-trips [])
+         {:refs {[:vessel/imo "123"] 1024
+                 [:vessel/mmsi "abc"] 1024
+                 [:vessel/imo "456"] 1025
+                 [:vessel/mmsi "def"] 1025
+                 [:service/id :s123] 1026}
+          :eavs #{(d/datom 1024 :vessel/imo "123" :prepare-services)
+                  (d/datom 1024 :vessel/imo "123" :prepare-vessels)
+                  (d/datom 1024 :vessel/mmsi "abc" :prepare-vessels)
+                  (d/datom 1025 :vessel/imo "456" :prepare-vessels)
+                  (d/datom 1025 :vessel/mmsi "def" :prepare-vessels)
+                  (d/datom 1026 :service/allocated-vessel 1024 :prepare-services)
+                  (d/datom 1026 :service/id :s123 :prepare-services)}})
+
+        (assert-report
+         (sut/with db-after :prepare-vessels [])
+         {:refs {[:vessel/imo "123"] 1024
+                 [:vessel/mmsi "abc"] 1024
+                 [:vessel/mmsi "def"] 1025
+                 [:service/id :s123] 1026
+                 [:trip/id "foo"] 1027
+                 [:trip/id "bar"] 1028}
+          :eavs #{(d/datom 1024 :vessel/imo "123" :prepare-services)
+                  (d/datom 1024 :vessel/mmsi "abc" :prepare-trips)
+                  (d/datom 1025 :vessel/mmsi "def" :prepare-trips)
+                  (d/datom 1026 :service/allocated-vessel 1024 :prepare-services)
+                  (d/datom 1026 :service/id :s123 :prepare-services)
+                  (d/datom 1027 :trip/id "foo" :prepare-trips)
+                  (d/datom 1027 :trip/vessel 1024 :prepare-trips)
+                  (d/datom 1028 :trip/id "bar" :prepare-trips)
+                  (d/datom 1028 :trip/vessel 1025 :prepare-trips)}})
+
+        (testing "Re-asserting keeps identity"
+          (assert-report
+           (sut/with (:db-after (sut/with db-after :prepare-vessels []))
+                     :prepare-vessels [{:vessel/imo "123" :vessel/mmsi "abc"}
+                                       {:vessel/imo "456" :vessel/mmsi "def"}])
+           {:refs {[:vessel/imo "123"] 1024
+                   [:vessel/mmsi "abc"] 1024
+                   [:vessel/imo "456"] 1025
+                   [:vessel/mmsi "def"] 1025
+                   [:service/id :s123] 1026
+                   [:trip/id "foo"] 1027
+                   [:trip/id "bar"] 1028}
+            :eavs #{(d/datom 1024 :vessel/imo "123" :prepare-vessels)
+                    (d/datom 1024 :vessel/mmsi "abc" :prepare-vessels)
+                    (d/datom 1024 :vessel/imo "123" :prepare-services)
+                    (d/datom 1024 :vessel/mmsi "abc" :prepare-trips)
+                    (d/datom 1025 :vessel/imo "456" :prepare-vessels)
+                    (d/datom 1025 :vessel/mmsi "def" :prepare-vessels)
+                    (d/datom 1025 :vessel/mmsi "def" :prepare-trips)
+                    (d/datom 1026 :service/allocated-vessel 1024 :prepare-services)
+                    (d/datom 1026 :service/id :s123 :prepare-services)
+                    (d/datom 1027 :trip/id "foo" :prepare-trips)
+                    (d/datom 1027 :trip/vessel 1024 :prepare-trips)
+                    (d/datom 1028 :trip/id "bar" :prepare-trips)
+                    (d/datom 1028 :trip/vessel 1025 :prepare-trips)}}))))
+
+    (testing "Asserting multiple identity attributes for already split entities gives a decent error message"
+      (let [{:keys [db-after]} (sut/with-sources @(sut/create-conn (merge schema
+                                                                          {:vessel/mmsi {:db/unique :db.unique/identity}
+                                                                           :trip/vessel {:db/valueType :db.type/ref
+                                                                                         :db/cardinality :db.cardinality/one}}))
+                                 {:prepare-services [{:service/id :s123
+                                                      :service/allocated-vessel {:vessel/imo "123"}}]
+                                  :prepare-trips [{:trip/id "foo" :trip/vessel {:vessel/mmsi "abc"}}]})]
+        (is (thrown-with-msg? Exception #"Conflicting identity attributes asserted, already held by different entities"
+                              (sut/with db-after :prepare-vessels [{:vessel/imo "123" :vessel/mmsi "abc"}])))))))
 
 (deftest transact!
   (testing "transact! works as with only wrapped with an atom"

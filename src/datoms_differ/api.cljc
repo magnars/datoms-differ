@@ -41,13 +41,17 @@
            entities-with-eid (transient [])
            entities entities]
       (let [entity (first entities)
-            rf (when entity (ch/get-entity-ref attrs entity))
-            eid (when rf (new-refs rf))]
+            rfs (when entity (ch/get-entity-refs attrs entity))
+            eids (set (keep new-refs rfs))
+            _ (when (next eids)
+                (throw (ex-info "Conflicting identity attributes asserted, already held by different entities"
+                                {:refs rfs :eids eids})))
+            eid (first eids)]
         (cond
           (nil? entity) [(persistent! new-refs) (persistent! entities-with-eid)]
 
           eid (recur idx
-                     new-refs
+                     (reduce #(assoc! %1 %2 eid) new-refs rfs)
                      (conj! entities-with-eid [entity eid])
                      (next entities))
 
@@ -55,18 +59,18 @@
           (do
             (when-not (<= from idx to)
               (throw (ex-info "Generated internal eid falls outside internal db-id-partition, check :datoms-differ.core2/db-id-partition"
-                              {:ref rf :eid idx :internal-partition {:from from :to to}})))
+                              {:refs rfs :eid idx :internal-partition {:from from :to to}})))
             (recur (inc idx)
-                   (assoc! new-refs rf idx)
+                   (reduce #(assoc! %1 %2 idx) new-refs rfs)
                    (conj! entities-with-eid [entity idx])
                    (next entities))))))))
 
 (defn- flatten-all-entities [source {:keys [ref? many? component?] :as attrs} refs all-entities]
   (let [disallow-nils (fn [k v entity]
                         (when (nil? v)
-                          (throw (ex-info "Attributes cannot be nil" {:entity (ch/get-entity-ref attrs entity)
+                          (throw (ex-info "Attributes cannot be nil" {:entity (ch/get-one-entity-ref attrs entity)
                                                                       :key k}))))
-        get-eid #(refs (ch/get-entity-ref-unsafe attrs %))]
+        get-eid #(refs (ch/get-one-entity-ref attrs %))]
     (->> all-entities
          (reduce
           (fn [acc [entity eid]]
