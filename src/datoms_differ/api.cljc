@@ -260,10 +260,13 @@
 (defn with [db source entity-maps]
   (with-sources db {source entity-maps}))
 
+(def ^:const implicit-schema
+  {:db/ident {:db/unique :db.unique/identity}})
+
 (defn- empty-db [schema]
   (when-not (map? schema)
     (throw (ex-info "Expected schema to be a map." {:type (type schema)})))
-  {:schema schema
+  {:schema (merge implicit-schema schema)
    :refs {}
    :eavs (d/empty-eavs)})
 

@@ -30,7 +30,7 @@
 
 (deftest create-conn
   (is (= @(sut/create-conn schema)
-         {:schema schema
+         {:schema (merge sut/implicit-schema schema)
           :refs {}
           :eavs #{}})))
 
@@ -651,6 +651,7 @@
                   " :my-tuple/a {}, :my-tuple/tup #:db{:tupleAttrs [:my-tuple/a :my-tuple/b]},"
                   " :holiday/pattern {},"
                   " :route/services #:db{:valueType :db.type/ref, :cardinality :db.cardinality/many},"
+                  " :db/ident #:db{:unique :db.unique/identity},"
                   " :service/allocated-vessel #:db{:valueType :db.type/ref, :cardinality :db.cardinality/one},"
                   " :route/number #:db{:unique :db.unique/identity},"
                   " :my-tuple/b {},"
