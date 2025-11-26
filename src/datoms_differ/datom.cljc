@@ -1,5 +1,8 @@
 (ns datoms-differ.datom
-  (:require [me.tonsky.persistent-sorted-set :as sset])
+  (:require [datoms-differ.compare :refer [combine-cmp cmp value-cmp]]
+            [me.tonsky.persistent-sorted-set :as sset])
+  #?(:cljs (:require-macros [datoms-differ.compare :refer [int-compare]])
+     :clj (:require [datoms-differ.compare :refer [int-compare]]))
   (:import (clojure.lang Seqable IPersistentCollection Indexed ILookup Associative MapEntry)
            (java.lang IllegalArgumentException Object UnsupportedOperationException)))
 
@@ -44,7 +47,6 @@
 
 
 (defn datom ^Datom [e a v s] (Datom. e a v s 0))
-
 
 (defn- hash-datom [^Datom d]
   (-> (hash (.-e d))
@@ -100,48 +102,24 @@
      (binding [*out* w]
        (pr [(.-e d) (.-a d) (.-v d) (.-s d)]))))
 
-;; Comparing datoms
-#?(:clj
-   (defmacro combine-cmp [& comps]
-     (loop [comps (reverse comps)
-            res   (num 0)]
-       (if (not-empty comps)
-         (recur
-          (next comps)
-          `(let [c# ~(first comps)]
-             (if (== 0 c#)
-               ~res
-               c#)))
-         res))))
-
-(defprotocol DatomValueComparator
+(defprotocol DatomValueComparator ;; unused, kept to avoid breaking old code
   "A protocol that allows you to provide custom compare for types of your choosing for the value attribute of a datom"
   (compare-value [this other]))
 
-(defn cmp [o1 o2]
-  (if (nil? o1) 0
-      (if (nil? o2) 0
-          (compare o1 o2))))
-
-(extend-protocol DatomValueComparator
-  Object
-  (compare-value [o1 o2] (cmp o1 o2))
-
-  nil
-  (compare-value [_ _] 0))
+(comment (compare-value nil nil))
 
 (defn cmp-datoms-eavs [^Datom d1, ^Datom d2]
   (combine-cmp
-   (#?(:clj Integer/compare :cljs -) (.-e d1) (.-e d2))
-   (cmp (.-a d1) (.-a d2))
-   (compare-value (.-v d1) (.-v d2))
-   (cmp (.-s d1) (.-s d2))))
+    (int-compare (.-e d1) (.-e d2))
+    (cmp (.-a d1) (.-a d2))
+    (value-cmp (.-v d1) (.-v d2))
+    (cmp (.-s d1) (.-s d2))))
 
 (defn cmp-datoms-eav-only [^Datom d1, ^Datom d2]
   (combine-cmp
-   (#?(:clj Integer/compare :cljs -) (.-e d1) (.-e d2))
-   (cmp (.-a d1) (.-a d2))
-   (compare-value (.-v d1) (.-v d2))))
+    (int-compare (.-e d1) (.-e d2))
+    (cmp (.-a d1) (.-a d2))
+    (value-cmp (.-v d1) (.-v d2))))
 
 (defn empty-eavs []
   (sset/sorted-set-by cmp-datoms-eavs))

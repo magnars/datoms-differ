@@ -91,6 +91,57 @@
                 (d/datom 1024 :route/tags :tag-2 :prepare-routes)}
         :refs {[:route/number "800"] 1024}}))
 
+    (testing "cardinality many with maps"
+      (assert-report
+       (sut/with (db) :prepare-routes [{:route/number "800"
+                                        :route/tags [{:foo 1}
+                                                     {:bar 2}]}])
+
+       {:tx-data [[:db/add 1024 :route/number "800"]
+                  [:db/add 1024 :route/tags {:bar 2}]
+                  [:db/add 1024 :route/tags {:foo 1}]]
+
+        :eavs #{(d/datom 1024 :route/number "800" :prepare-routes)
+                (d/datom 1024 :route/tags {:foo 1} :prepare-routes)
+                (d/datom 1024 :route/tags {:bar 2} :prepare-routes)}
+        :refs {[:route/number "800"] 1024}}))
+
+    (testing "cardinality many with seqs"
+      (assert-report
+       (sut/with (db) :prepare-routes [{:route/number "800"
+                                        :route/tags ['(:foo 1)
+                                                     '(:bar 2)]}])
+
+       {:tx-data [[:db/add 1024 :route/number "800"]
+                  [:db/add 1024 :route/tags '(:bar 2)]
+                  [:db/add 1024 :route/tags '(:foo 1)]]
+
+        :eavs #{(d/datom 1024 :route/number "800" :prepare-routes)
+                (d/datom 1024 :route/tags '(:foo 1) :prepare-routes)
+                (d/datom 1024 :route/tags '(:bar 2) :prepare-routes)}
+        :refs {[:route/number "800"] 1024}}))
+
+    (testing "cardinality many with mixed types"
+      (assert-report
+       (sut/with (db) :prepare-routes [{:route/number "800"
+                                        :route/tags [[:foo 1]
+                                                     '(:bar 2)
+                                                     {:baz 3}
+                                                     :zoom]}])
+
+       {:tx-data [[:db/add 1024 :route/number "800"]
+                  [:db/add 1024 :route/tags :zoom]
+                  [:db/add 1024 :route/tags {:baz 3}]
+                  [:db/add 1024 :route/tags '(:bar 2)]
+                  [:db/add 1024 :route/tags '(:foo 1)]]
+
+        :eavs #{(d/datom 1024 :route/number "800" :prepare-routes)
+                (d/datom 1024 :route/tags [:foo 1] :prepare-routes)
+                (d/datom 1024 :route/tags '(:bar 2) :prepare-routes)
+                (d/datom 1024 :route/tags {:baz 3} :prepare-routes)
+                (d/datom 1024 :route/tags :zoom :prepare-routes)}
+        :refs {[:route/number "800"] 1024}}))
+
     (testing "empty db entity with tuple attributes"
       (assert-report
        (sut/with (db) :prepare [{:holiday/pattern :christmas-day :holiday/weekday :monday}])
@@ -269,17 +320,17 @@
 
     (testing "tuple unique identity conflicts on two entities with same tuple throws"
       (try
-       (sut/with (db) :prepare [{:holiday/pattern :christmas-day :holiday/weekday :monday :holiday/extra :foo}
-                                {:holiday/pattern :christmas-day :holiday/weekday :monday :holiday/extra :bar}])
+        (sut/with (db) :prepare [{:holiday/pattern :christmas-day :holiday/weekday :monday :holiday/extra :foo}
+                                 {:holiday/pattern :christmas-day :holiday/weekday :monday :holiday/extra :bar}])
 
-       (is (= :should-throw :didnt))
-       (catch Exception e
-         (is (= "Conflicting values asserted for entity" (.getMessage e)))
-         (is (= {:entity-ref [:holiday/bus-key [:christmas-day :monday]]
-                 :attr :holiday/extra
-                 :conflict {:prepare #{:foo :bar}}}
-                (ex-data e))))
-       )))
+        (is (= :should-throw :didnt))
+        (catch Exception e
+          (is (= "Conflicting values asserted for entity" (.getMessage e)))
+          (is (= {:entity-ref [:holiday/bus-key [:christmas-day :monday]]
+                  :attr :holiday/extra
+                  :conflict {:prepare #{:foo :bar}}}
+                 (ex-data e))))
+        )))
 
   (testing "PREVIOUS DB, ONE SOURCE"
     (testing "Same entitie(s) gives no diff"
