@@ -1,4 +1,6 @@
 (ns datoms-differ.export
+  "Deprecation warning: This namespace is here for backwards compatibility. You
+  probably want to use datoms-differ.api instead."
   (:require [datoms-differ.core :refer [get-datoms]]
             [datoms-differ.impl.core-helpers :as ch]
             [medley.core :refer [filter-keys map-vals]]))
